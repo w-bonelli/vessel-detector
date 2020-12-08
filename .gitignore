@@ -1,0 +1,16 @@
+*.xlsx
+__pycache__/*
+bin/
+lib/
+pyvenv.cfg
+share/
+*.jpeg
+*.sif
+utils.pyc
+.idea/
+.env
+.bash_history
+.python_history
+*test/
+.cache/*
+tools/__pycache__/
