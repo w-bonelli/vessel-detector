@@ -5,7 +5,7 @@ clone: True
 from: 
 to: output
 image: docker://computationalplantscience/vessel-analysis
-commands: python3 arabidopsis-rosette-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE"
+commands: python3 vessel-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE"
 logo: vessels.jpg
 params:
  - filetype
