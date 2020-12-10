@@ -1,6 +1,6 @@
-# Vessel Analysis
+# Vessel Detector
 
-Detect injection-filled and empty vessels in stem tissues.
+Detects injection-filled and empty vessels in stem tissues.
 
 Author: Suxing Liu (adapted by Wes Bonelli)
 
