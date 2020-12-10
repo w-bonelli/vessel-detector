@@ -4,7 +4,7 @@ public: True
 clone: True
 from: 
 to: output
-image: docker://computationalplantscience/vessel-detector
+image: docker://computationalplantscience/vessel-analysis
 commands: python3 arabidopsis-rosette-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE"
 logo: vessels_logo.jpg
 params:
