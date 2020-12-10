@@ -1,27 +1,27 @@
 # Vessel Analysis
 
-Author: Suxing Liu
+Detect vessels in stem tissue.
 
-Robust and parameter-free plant image segmentation and trait extraction.
-
-1. Process with plant image top view, including whole tray plant image, this tool will segment it into individual images.
-2. Robust segmentation based on parameter-free color clustering method.
-3. Extract individual plant gemetrical traits, and write output into excel file.
+Author: Suxing Liu (adapted by Wes Bonelli)
 
 ## Requirements
 
-Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/) is required to run this project in a Unix environment.
+Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/) is required to run this project in a Unix environment. First, clone the project with `git clone https://github.com/w-bonelli/vessel-analysis.git`.
 
 ## Usage
+
+To analyze files in a directory relative to the project root (e.g., `input/directory`):
 
 ### Docker
 
 ```bash
-docker run computationalplantscience/arabidopsis-rosette-analysis python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
+docker run -v "$(pwd)":/opt/vessel-analysis computationalplantscience/vessel-analysis python3 trait_extract_parallel.py -i input/directory -o output/directory -r 15 -c 500 -ft jpg
 ```
 
 ### Singularity
 
 ```bash
-singularity exec docker://computationalplantscience/arabidopsis-rosette-analysis python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
+singularity exec docker://computationalplantscience/vessel-analysis python3 trait_extract_parallel.py -i /input/directory -o output/directory -r 15 -c 500 -ft jpg
 ```
+
+The `.czi` file format is also supported.

@@ -1,5 +1,5 @@
 name: Vessel Detector
-author: Suxing Liu, Wes Bonelli
+author: Wes Bonelli
 public: True
 clone: True
 from: 
@@ -9,6 +9,8 @@ commands: python3 arabidopsis-rosette-analysis/trait_extract_parallel.py -i "$IN
 logo: vessels_logo.jpg
 params:
  - filetype
+ - min_radius=15
+ - min_size=500
 resources:
   time: "02:00:00"
   mem: "31GB"

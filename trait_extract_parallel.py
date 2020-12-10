@@ -34,10 +34,9 @@ from openpyxl import load_workbook
 from scipy import ndimage
 from scipy.interpolate import interp1d
 from scipy.spatial import distance as dist
-from skimage import img_as_float, img_as_ubyte, img_as_bool
 from skimage.color import rgb2lab, deltaE_cie76
 from skimage.feature import peak_local_max
-from skimage.morphology import watershed, medial_axis
+from skimage.morphology import watershed
 from sklearn.cluster import KMeans
 from sklearn.cluster import MiniBatchKMeans
 
@@ -53,16 +52,16 @@ from contextlib import closing
 MBFACTOR = float(1 << 20)
 
 
-def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
-    #clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
-    #image = clahe.apply(image)  # apply CLAHE to the L-channel
-    #image = cv2.equalizeHist(image)
-    #image = cv2.medianBlur(image, 5)
-    #clahe = cv2.createCLAHE(clipLimit=0.25, tileGridSize=(8,8))
-    #image = clahe.apply(image)
+def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_clusters, min_cluster_size=500):
+    # clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
+    # image = clahe.apply(image)  # apply CLAHE to the L-channel
+    # image = cv2.equalizeHist(image)
+    # image = cv2.medianBlur(image, 5)
+    # clahe = cv2.createCLAHE(clipLimit=0.25, tileGridSize=(8,8))
+    # image = clahe.apply(image)
     image = cv2.filter2D(image, -1, np.ones((5, 5), np.float32) / 25)
     _, image = cv2.threshold(image, 140, 255, cv2.THRESH_BINARY)
-    #image = cv2.adaptiveThreshold(image.astype(dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    # image = cv2.adaptiveThreshold(image.astype(dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
 
     (width, height) = image.shape
 
@@ -94,22 +93,16 @@ def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_cluste
         kmeansImage[clustering == label] = int(255 / (numClusters - 1)) * i
 
     ret, thresh = cv2.threshold(kmeansImage, 140, 255, cv2.THRESH_BINARY)
-
-    # return thresh
-
     nb_components, output, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+    print(f"Found {nb_components} clusters")
 
     sizes = stats[1:, -1]
-
     nb_components = nb_components - 1
-
-    min_size = 500
-
     img_thresh = np.zeros([width, height], dtype=np.uint8)
 
     # for every component in the image, you keep it only if it's above min_size
     for i in range(0, nb_components):
-        if sizes[i] >= min_size:
+        if sizes[i] >= min_cluster_size:
             img_thresh[output == i + 1] = 255
 
     return img_thresh
@@ -190,17 +183,6 @@ def color_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
             img_thresh[output == i + 1] = 255
 
     return img_thresh
-
-
-def medial_axis_image(thresh):
-    # convert an image from OpenCV to skimage
-    thresh_sk = img_as_float(thresh)
-
-    image_bw = img_as_bool((thresh_sk))
-
-    image_medial_axis = medial_axis(image_bw)
-
-    return image_medial_axis
 
 
 def watershed_seg(orig, thresh, min_distance_value):
@@ -385,108 +367,6 @@ def RGB2HEX(color):
     return "#{:02x}{:02x}{:02x}".format(int(color[0]), int(color[1]), int(color[2]))
 
 
-def color_quantization(image, mask, save_path, num_clusters):
-    # grab image width and height
-    (h, w) = image.shape[:2]
-
-    # change the color storage order
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # apply the mask to get the segmentation of plant
-    masked_image = cv2.bitwise_and(image, image, mask=mask)
-
-    # reshape the image to be a list of pixels
-    pixels = masked_image.reshape((masked_image.shape[0] * masked_image.shape[1], 3))
-
-    ############################################################
-    # Clustering process
-    ###############################################################
-    # cluster the pixel intensities
-    clt = MiniBatchKMeans(n_clusters=num_clusters)
-    # clt = KMeans(n_clusters = args["clusters"])
-    clt.fit(pixels)
-
-    # assign labels to each cluster
-    labels = clt.fit_predict(pixels)
-
-    # obtain the quantized clusters using each label
-    quant = clt.cluster_centers_.astype("uint8")[labels]
-
-    # reshape the feature vectors to images
-    quant = quant.reshape((h, w, 3))
-    image_rec = pixels.reshape((h, w, 3))
-
-    # convert from L*a*b* to RGB
-    quant = cv2.cvtColor(quant, cv2.COLOR_RGB2BGR)
-    image_rec = cv2.cvtColor(image_rec, cv2.COLOR_RGB2BGR)
-
-    # display the images and wait for a keypress
-    # cv2.imshow("image", np.hstack([image_rec, quant]))
-    # cv2.waitKey(0)
-
-    # define result path for labeled images
-    result_img_path = save_path + 'cluster_out.png'
-
-    # save color_quantization results
-    cv2.imwrite(result_img_path, quant)
-
-    # Get colors and analze them from masked image
-    counts = Counter(labels)
-    # sort to ensure correct color percentage
-    counts = dict(sorted(counts.items()))
-
-    center_colors = clt.cluster_centers_
-
-    # print(type(center_colors))
-
-    # We get ordered colors by iterating through the keys
-    ordered_colors = [center_colors[i] for i in counts.keys()]
-    hex_colors = [RGB2HEX(ordered_colors[i]) for i in counts.keys()]
-    rgb_colors = [ordered_colors[i] for i in counts.keys()]
-
-    # print(hex_colors)
-
-    index_bkg = [index for index in range(len(hex_colors)) if hex_colors[index] == '#000000']
-
-    # print(index_bkg[0])
-
-    # print(counts)
-    # remove background color
-    del hex_colors[index_bkg[0]]
-    del rgb_colors[index_bkg[0]]
-
-    # Using dictionary comprehension to find list 
-    # keys having value . 
-    delete = [key for key in counts if key == index_bkg[0]]
-
-    # delete the key 
-    for key in delete: del counts[key]
-
-    fig = plt.figure(figsize=(6, 6))
-    plt.pie(counts.values(), labels=hex_colors, colors=hex_colors)
-
-    # define result path for labeled images
-    result_img_path = save_path + 'pie_color.png'
-    plt.savefig(result_img_path)
-
-    # build a histogram of clusters and then create a figure representing the number of pixels labeled to each color
-    hist = utils.centroid_histogram(clt)
-
-    # remove the background color cluster
-    clt.cluster_centers_ = np.delete(clt.cluster_centers_, index_bkg[0], axis=0)
-
-    # build a histogram of clusters using center lables
-    numLabels = utils.plot_centroid_histogram(save_path, clt)
-
-    # create a figure representing the distribution of each color
-    bar = utils.plot_colors(hist, clt.cluster_centers_)
-
-    # save a figure of color bar
-    utils.plot_color_bar(save_path, bar)
-
-    return rgb_colors
-
-
 def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
     RGB color; the keyword argument name must be a standard mpl colormap name.'''
@@ -500,10 +380,6 @@ def grayscale_region(image, mask, output_dir, num_clusters):
 
     # apply the mask to get the segmentation of plant
     masked_image_ori = cv2.bitwise_and(image, image, mask=mask)
-
-    # define result path for labeled images
-    drawn_contours_path = output_dir + '_masked.png'
-    cv2.imwrite(drawn_contours_path, masked_image_ori)
 
     # convert to RGB
     image_RGB = cv2.cvtColor(masked_image_ori, cv2.COLOR_BGR2RGB)
@@ -645,13 +521,6 @@ def grayscale_region(image, mask, output_dir, num_clusters):
     # delete the key
     for key in delete: del counts[key]
 
-    fig = plt.figure(figsize=(6, 6))
-    plt.pie(counts.values(), labels=hex_colors, colors=hex_colors)
-
-    # define result path for labeled images
-    drawn_contours_path = output_dir + '_pie_color.png'
-    plt.savefig(drawn_contours_path)
-
     return rgb_colors
 
 
@@ -662,10 +531,6 @@ def color_region(image, mask, output_dir, num_clusters):
 
     # apply the mask to get the segmentation of plant
     masked_image_ori = cv2.bitwise_and(image, image, mask=mask)
-
-    # define result path for labeled images
-    drawn_contours_path = output_dir + '_masked.png'
-    cv2.imwrite(drawn_contours_path, masked_image_ori)
 
     # convert to RGB
     image_RGB = cv2.cvtColor(masked_image_ori, cv2.COLOR_BGR2RGB)
@@ -817,7 +682,7 @@ def color_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
-def extract_traits(image_path, min_radius):
+def extract_traits(image_path, min_radius, min_cluster_size):
     print(image_path)
     image_abs_path = os.path.abspath(image_path)
     image_file_name, img_file_ext = os.path.splitext(image_abs_path)
@@ -849,7 +714,7 @@ def extract_traits(image_path, min_radius):
     if image.shape[2] == 1:
         # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
         # grayscale clustering based plant object segmentation
-        thresh = grayscale_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
+        thresh = grayscale_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters, int(min_cluster_size))
     else:
         # color clustering based plant object segmentation
         thresh = color_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
@@ -860,7 +725,8 @@ def extract_traits(image_path, min_radius):
 
     num_clusters = 5
     if image.shape[2] == 1:
-        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(output_dir, image_file), num_clusters)
+        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(output_dir, image_file),
+                                      num_clusters)
     else:
         rgb_colors = color_region(converted, thresh, join(output_dir, image_file), num_clusters)
 
@@ -873,13 +739,6 @@ def extract_traits(image_path, min_radius):
         curr_color = rgb2lab(np.uint8(np.asarray([[value]])))
         diff = deltaE_cie76(selected_color, curr_color)
         print(index, value, diff)
-
-    # accquire medial axis of segmentation mask
-    image_medial_axis = medial_axis_image(thresh)
-
-    # save medial axis result
-    maxis = join(output_dir, f"{image_file}_medial_axis{img_file_ext}")
-    cv2.imwrite(maxis, img_as_ubyte(image_medial_axis))
 
     min_distance_value = 5
     # watershed based leaf area segmentaiton
@@ -895,14 +754,9 @@ def extract_traits(image_path, min_radius):
     # cvt to BGR for display
     labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
 
-    # set background label to black
-    labeled_img[label_hue == 0] = 0
-    lbl = join(output_dir, f"{image_file}_label{img_file_ext}")
-    cv2.imwrite(lbl, labeled_img)
-
     # find curvature
     if min_radius is not None:
-        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1, min_radius)
+        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1, int(min_radius))
     else:
         (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1)
     if label_trait is not None:
@@ -922,7 +776,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True, help="path to input directory (containing image files)")
     parser.add_argument("-o", "--output", required=False, help="path to directory to write output files")
-    parser.add_argument("-r", "--min-radius", required=False, help="minimum vessel radius to detect")
+    parser.add_argument("-r", "--min-radius", required=False, help="minimum vessel radius (pixels, length) to detect")
+    parser.add_argument("-m", "--min-size", required=False, help="minimum vessel size (pixels, area) to detect")
     parser.add_argument("-ft", "--filetype", required=True, help="Image filetype")
     parser.add_argument('-s', '--color-space', type=str, default='lab',
                         help='Color space to use: BGR (default), HSV, Lab, YCrCb (YCC)')
@@ -938,12 +793,13 @@ if __name__ == '__main__':
     output_dir = args["output"] if 'output' in args else None
     input_images = sorted(glob.glob(f"{input_dir}/*.{args['filetype']}"))
     min_radius = args["min_radius"] if 'min_radius' in args else None
+    min_size = args["min_size"] if 'min_size' in args else None
     cpus = multiprocessing.cpu_count()
 
     print(f"Using {int(cpus)} cores to process {len(input_images)} images...")
 
     with closing(Pool(processes=cpus)) as pool:
-        result = pool.starmap(extract_traits, [(image, min_radius) for image in input_images])
+        result = pool.starmap(extract_traits, [(image, min_radius, min_size) for image in input_images])
         pool.terminate()
 
     # if output dir provided, create it (if needed). otherwise use current directory
