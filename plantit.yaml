@@ -6,7 +6,7 @@ from:
 to: output
 image: docker://computationalplantscience/vessel-detector
 commands: python3 arabidopsis-rosette-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE"
-logo: rosette_logo.jpg
+logo: vessels_logo.jpg
 params:
  - filetype
 resources:

@@ -25,6 +25,7 @@ from os.path import join, dirname
 from pathlib import Path
 
 import cv2
+import czifile
 import imutils
 import matplotlib.pyplot as plt
 import numpy as np
@@ -50,6 +51,68 @@ from multiprocessing import Pool
 from contextlib import closing
 
 MBFACTOR = float(1 << 20)
+
+
+def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
+    #clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
+    #image = clahe.apply(image)  # apply CLAHE to the L-channel
+    #image = cv2.equalizeHist(image)
+    #image = cv2.medianBlur(image, 5)
+    #clahe = cv2.createCLAHE(clipLimit=0.25, tileGridSize=(8,8))
+    #image = clahe.apply(image)
+    image = cv2.filter2D(image, -1, np.ones((5, 5), np.float32) / 25)
+    _, image = cv2.threshold(image, 140, 255, cv2.THRESH_BINARY)
+    #image = cv2.adaptiveThreshold(image.astype(dtype=np.uint8), 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+
+    (width, height) = image.shape
+
+    # Flatten the 2D image array into an MxN feature vector, where M is the number of pixels and N is the dimension (number of channels).
+    reshaped = image.reshape(image.shape[0] * image.shape[1], 1)
+
+    # Perform K-means clustering.
+    if args_num_clusters < 2:
+        print('Warning: num-clusters < 2 invalid. Using num-clusters = 2')
+
+    # define number of cluster
+    numClusters = max(2, args_num_clusters)
+
+    # clustering method
+    kmeans = KMeans(n_clusters=numClusters, n_init=40, max_iter=500).fit(reshaped)
+
+    # get lables
+    pred_label = kmeans.labels_
+
+    # Reshape result back into a 2D array, where each element represents the corresponding pixel's cluster index (0 to K - 1).
+    clustering = np.reshape(np.array(pred_label, dtype=np.uint8), (image.shape[0], image.shape[1]))
+
+    # Sort the cluster labels in order of the frequency with which they occur.
+    sortedLabels = sorted([n for n in range(numClusters)], key=lambda x: -np.sum(clustering == x))
+
+    # Initialize K-means grayscale image; set pixel colors based on clustering.
+    kmeansImage = np.zeros(image.shape[:2], dtype=np.uint8)
+    for i, label in enumerate(sortedLabels):
+        kmeansImage[clustering == label] = int(255 / (numClusters - 1)) * i
+
+    ret, thresh = cv2.threshold(kmeansImage, 140, 255, cv2.THRESH_BINARY)
+
+    # return thresh
+
+    nb_components, output, stats, centroids = cv2.connectedComponentsWithStats(thresh, connectivity=8)
+
+    sizes = stats[1:, -1]
+
+    nb_components = nb_components - 1
+
+    min_size = 500
+
+    img_thresh = np.zeros([width, height], dtype=np.uint8)
+
+    # for every component in the image, you keep it only if it's above min_size
+    for i in range(0, nb_components):
+        if sizes[i] >= min_size:
+            img_thresh[output == i + 1] = 255
+
+    return img_thresh
 
 
 def color_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
@@ -125,13 +188,6 @@ def color_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
     for i in range(0, nb_components):
         if sizes[i] >= min_size:
             img_thresh[output == i + 1] = 255
-
-    # from skimage import img_as_ubyte
-
-    # img_thresh = img_as_ubyte(img_thresh)
-
-    # print("img_thresh.dtype")
-    # print(img_thresh.dtype)
 
     return img_thresh
 
@@ -265,10 +321,9 @@ def comp_external_contour(orig, thresh):
     return None, None, None, None, None
 
 
-
-def compute_curv(orig, labels):
-    gray = cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
-
+def compute_curv(orig, labels, grayscale=False, min_radius=10):
+    gray = orig if grayscale else cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
+    label_trait = None
     curv_sum = 0.0
     count = 0
     # curvature computation
@@ -291,6 +346,7 @@ def compute_curv(orig, labels):
 
         # draw a circle enclosing the object
         ((x, y), r) = cv2.minEnclosingCircle(c)
+        if r < min_radius: continue
         label_trait = cv2.circle(orig, (int(x), int(y)), 3, (0, 255, 0), 2)
         label_trait = cv2.putText(orig, "#{}".format(label), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
                                   (0, 0, 255), 2)
@@ -317,9 +373,12 @@ def compute_curv(orig, labels):
             label_trait = cv2.drawContours(orig, [c], -1, (0, 0, 255), 2)
             print("Not enough points to fit ellipse")
 
-    print('Average curvature: {0:.2f}'.format(curv_sum / count))
+    if count != 0:
+        print('Average curvature: {0:.2f}'.format(curv_sum / count))
+    else:
+        print("Can't find average curvature, no contours found")
 
-    return curv_sum / count, label_trait
+    return curv_sum / count if count != 0 else 0, label_trait
 
 
 def RGB2HEX(color):
@@ -432,6 +491,168 @@ def get_cmap(n, name='hsv'):
     '''Returns a function that maps each index in 0, 1, ..., n-1 to a distinct 
     RGB color; the keyword argument name must be a standard mpl colormap name.'''
     return plt.cm.get_cmap(name, n)
+
+
+def grayscale_region(image, mask, output_dir, num_clusters):
+    # read the image
+    # grab image width and height
+    (h, w) = image.shape[:2]
+
+    # apply the mask to get the segmentation of plant
+    masked_image_ori = cv2.bitwise_and(image, image, mask=mask)
+
+    # define result path for labeled images
+    drawn_contours_path = output_dir + '_masked.png'
+    cv2.imwrite(drawn_contours_path, masked_image_ori)
+
+    # convert to RGB
+    image_RGB = cv2.cvtColor(masked_image_ori, cv2.COLOR_BGR2RGB)
+
+    # reshape the image to a 2D array of pixels and 3 color values (RGB)
+    pixel_values = image_RGB.reshape((-1, 3))
+
+    # convert to float
+    pixel_values = np.float32(pixel_values)
+
+    # define stopping criteria
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 100, 0.2)
+
+    # number of clusters (K)
+    # num_clusters = 5
+    compactness, labels, (centers) = cv2.kmeans(pixel_values, num_clusters, None, criteria, 10,
+                                                cv2.KMEANS_RANDOM_CENTERS)
+
+    # convert back to 8 bit values
+    centers = np.uint8(centers)
+
+    # flatten the labels array
+    labels_flat = labels.flatten()
+
+    # convert all pixels to the color of the centroids
+    segmented_image = centers[labels_flat]
+
+    # reshape back to the original image dimension
+    segmented_image = segmented_image.reshape(image_RGB.shape)
+
+    segmented_image_BRG = cv2.cvtColor(segmented_image, cv2.COLOR_RGB2BGR)
+    # define result path for labeled images
+    drawn_contours_path = output_dir + '_clustered.png'
+    cv2.imwrite(drawn_contours_path, segmented_image_BRG)
+
+    '''
+    fig = plt.figure()
+    ax = Axes3D(fig)        
+    for label, pix in zip(labels, segmented_image):
+        ax.scatter(pix[0], pix[1], pix[2], color = (centers))
+
+    result_file = (save_path + base_name + 'color_cluster_distributation.png')
+    plt.savefig(result_file)
+    '''
+    # Show only one chosen cluster
+    # masked_image = np.copy(image)
+    masked_image = np.zeros_like(image_RGB)
+
+    # convert to the shape of a vector of pixel values
+    masked_image = masked_image.reshape((-1, 3))
+    # color (i.e cluster) to render
+    # cluster = 2
+
+    cmap = get_cmap(num_clusters + 1)
+
+    # clrs = sns.color_palette('husl', n_colors = num_clusters)  # a list of RGB tuples
+
+    color_conversion = interp1d([0, 1], [0, 255])
+
+    for cluster in range(num_clusters):
+
+        print("Processing cluster {0}...".format(cluster))
+        # print(clrs[cluster])
+        # print(color_conversion(clrs[cluster]))
+
+        masked_image[labels_flat == cluster] = centers[cluster]
+
+        # print(centers[cluster])
+
+        # convert back to original shape
+        masked_image_rp = masked_image.reshape(image_RGB.shape)
+
+        gray = cv2.cvtColor(masked_image_rp, cv2.COLOR_BGR2GRAY)
+
+        # masked_image_BRG = cv2.cvtColor(masked_image, cv2.COLOR_RGB2BGR)
+        # cv2.imwrite('maksed.png', masked_image_BRG)
+
+        # threshold the image, then perform a series of erosions +
+        # dilations to remove any small regions of noise
+        # thresh = cv2.Canny(gray, 0, 255)
+        thresh = cv2.threshold(gray, 200, 255, cv2.THRESH_BINARY)[1]
+        contours = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        contours = imutils.grab_contours(contours)
+        # c = max(cnts, key=cv2.contourArea)
+
+        '''
+        # compute the center of the contour area and draw a circle representing the center
+        M = cv2.moments(c)
+        cX = int(M["m10"] / M["m00"]
+        cY = int(M["m01"] / M["m00"])
+        # draw the countour number on the image
+        result = cv2.putText(masked_image_rp, "#{}".format(cluster + 1), (cX - 20, cY), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 2)
+        '''
+
+        if not contours:
+            print("findContours is empty")
+        else:
+            # loop over the (unsorted) contours and draw them
+            drawn_contours = None
+            for (i, c) in enumerate(contours):
+                drawn_contours = cv2.drawContours(masked_image_rp, c, -1, color_conversion(np.random.random(3)), 2)
+                # result = cv2.drawContours(masked_image_rp, c, -1, color_conversion(clrs[cluster]), 2)
+
+            if drawn_contours is None:
+                return
+
+            drawn_contours[drawn_contours == 0] = 255
+
+            drawn_contours_colors = cv2.cvtColor(drawn_contours, cv2.COLOR_RGB2BGR)
+            drawn_contours_path = output_dir + '_contours_' + str(cluster) + '.png'
+            cv2.imwrite(drawn_contours_path, drawn_contours_colors)
+
+    counts = Counter(labels_flat)
+    # sort to ensure correct color percentage
+    counts = dict(sorted(counts.items()))
+
+    center_colors = centers
+
+    # We get ordered colors by iterating through the keys
+    ordered_colors = [center_colors[i] for i in counts.keys()]
+    hex_colors = [RGB2HEX(ordered_colors[i]) for i in counts.keys()]
+    rgb_colors = [ordered_colors[i] for i in counts.keys()]
+
+    # print(hex_colors)
+
+    index_bkg = [index for index in range(len(hex_colors)) if hex_colors[index] == '#000000']
+
+    # print(index_bkg[0])
+
+    # print(counts)
+    # remove background color
+    del hex_colors[index_bkg[0]]
+    del rgb_colors[index_bkg[0]]
+
+    # Using dictionary comprehension to find list
+    # keys having value .
+    delete = [key for key in counts if key == index_bkg[0]]
+
+    # delete the key
+    for key in delete: del counts[key]
+
+    fig = plt.figure(figsize=(6, 6))
+    plt.pie(counts.values(), labels=hex_colors, colors=hex_colors)
+
+    # define result path for labeled images
+    drawn_contours_path = output_dir + '_pie_color.png'
+    plt.savefig(drawn_contours_path)
+
+    return rgb_colors
 
 
 def color_region(image, mask, output_dir, num_clusters):
@@ -596,7 +817,7 @@ def color_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
-def extract_traits(image_path):
+def extract_traits(image_path, min_radius):
     print(image_path)
     image_abs_path = os.path.abspath(image_path)
     image_file_name, img_file_ext = os.path.splitext(image_abs_path)
@@ -606,26 +827,42 @@ def extract_traits(image_path):
     output_dir = join(dirname(dirname(image_path)), 'output')
     Path(output_dir).mkdir(exist_ok=True)
 
-    print(f"Extracting traits for image '{image_file}' to '{output_dir}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
+    print(
+        f"Extracting traits for image '{image_file}' to '{output_dir}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
 
-    image = cv2.imread(image_path)
-
-    # make backup image
-    orig = image.copy()
+    if image_path.endswith('.czi'):
+        image = czifile.imread(image_path)
+        image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
+        img_file_ext = '.jpg'
+    else:
+        image = cv2.imread(image_path)
 
     args_colorspace = args['color_space']
     args_channels = args['channels']
     args_num_clusters = args['num_clusters']
 
-    # color clustering based plant object segmentation
-    thresh = color_cluster_seg(orig, args_colorspace, args_channels, args_num_clusters)
+    # make backup image
+    converted = image.copy()
+    cv2.imwrite(join(output_dir, f"{image_file}_cvt{img_file_ext}"), converted)
+
+    # add color channels if it's a grayscale image
+    if image.shape[2] == 1:
+        # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
+        # grayscale clustering based plant object segmentation
+        thresh = grayscale_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
+    else:
+        # color clustering based plant object segmentation
+        thresh = color_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
 
     # save segmentation result
     seg = join(output_dir, f"{image_file}_seg{img_file_ext}")
     cv2.imwrite(seg, thresh)
 
     num_clusters = 5
-    rgb_colors = color_region(orig, thresh, join(output_dir, image_file), num_clusters)
+    if image.shape[2] == 1:
+        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(output_dir, image_file), num_clusters)
+    else:
+        rgb_colors = color_region(converted, thresh, join(output_dir, image_file), num_clusters)
 
     print("Color difference:")
 
@@ -646,7 +883,7 @@ def extract_traits(image_path):
 
     min_distance_value = 5
     # watershed based leaf area segmentaiton
-    labels = watershed_seg(orig, thresh, min_distance_value)
+    labels = watershed_seg(converted, thresh, min_distance_value)
 
     # save watershed result label image
     # Map component labels to hue val
@@ -664,9 +901,13 @@ def extract_traits(image_path):
     cv2.imwrite(lbl, labeled_img)
 
     # find curvature
-    (avg_curv, label_trait) = compute_curv(orig, labels)
-    curv = join(output_dir, f"{image_file}_curv{img_file_ext}")
-    cv2.imwrite(curv, label_trait)
+    if min_radius is not None:
+        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1, min_radius)
+    else:
+        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1)
+    if label_trait is not None:
+        curv = join(output_dir, f"{image_file}_curv{img_file_ext}")
+        cv2.imwrite(curv, label_trait)
 
     # find external contour
     (trait_img, area, solidity, max_width, max_height) = comp_external_contour(image.copy(), thresh)
@@ -679,28 +920,30 @@ def extract_traits(image_path):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input-path", required=True, help="path to input directory (containing image files)")
-    parser.add_argument("-o", "--output-path", required=False, help="path to directory to write output files")
+    parser.add_argument("-i", "--input", required=True, help="path to input directory (containing image files)")
+    parser.add_argument("-o", "--output", required=False, help="path to directory to write output files")
+    parser.add_argument("-r", "--min-radius", required=False, help="minimum vessel radius to detect")
     parser.add_argument("-ft", "--filetype", required=True, help="Image filetype")
     parser.add_argument('-s', '--color-space', type=str, default='lab',
                         help='Color space to use: BGR (default), HSV, Lab, YCrCb (YCC)')
     parser.add_argument('-c', '--channels', type=str, default='1',
                         help='Channel indices to use for clustering, where 0 is the first channel,'
-                         + ' 1 is the second channel, etc. E.g., if BGR color space is used, "02" '
-                         + 'selects channels B and R. (default "all")')
+                             + ' 1 is the second channel, etc. E.g., if BGR color space is used, "02" '
+                             + 'selects channels B and R. (default "all")')
     parser.add_argument('-n', '--num-clusters', type=int, default=2,
                         help='Number of clusters for K-means clustering (default 3, min 2).')
 
     args = vars(parser.parse_args())
-    input_dir = args["input-path"]
-    output_dir = args["output-path"] if 'output-path' in args else None
+    input_dir = args["input"]
+    output_dir = args["output"] if 'output' in args else None
     input_images = sorted(glob.glob(f"{input_dir}/*.{args['filetype']}"))
+    min_radius = args["min_radius"] if 'min_radius' in args else None
     cpus = multiprocessing.cpu_count()
 
     print(f"Using {int(cpus)} cores to process {len(input_images)} images...")
 
     with closing(Pool(processes=cpus)) as pool:
-        result = pool.map(extract_traits, input_images)
+        result = pool.starmap(extract_traits, [(image, min_radius) for image in input_images])
         pool.terminate()
 
     # if output dir provided, create it (if needed). otherwise use current directory
