@@ -2,6 +2,7 @@ name: Vessel Detector
 author: Wes Bonelli
 public: True
 clone: True
+from_directory: True
 from: 
 to: output
 image: docker://computationalplantscience/vessel-analysis
