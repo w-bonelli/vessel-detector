@@ -15,7 +15,7 @@ To analyze files in a directory relative to the project root (e.g., `input/direc
 ### Docker
 
 ```bash
-docker run -v "$(pwd)":/opt/vessel-analysis computationalplantscience/vessel-analysis python3 trait_extract_parallel.py -i input/directory -o output/directory -r 15 -c 500 -ft jpg
+docker run -v "$(pwd)":/opt/vessel-analysis -w /opt/vessel-analysis computationalplantscience/vessel-analysis python3 /opt/vessel-analysis/trait_extract_parallel.py -i input/directory -o output/directory -r 15 -c 500 -ft jpg
 ```
 
 ### Singularity
