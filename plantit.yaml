@@ -6,7 +6,7 @@ from_directory: True
 from: 
 to: output
 image: docker://computationalplantscience/vessel-analysis
-commands: python3 /opt/vessel-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE" -r "$MIN_RADIUS" -m "$MIN_SIZE"
+commands: python3 /opt/vessel-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE" -r $MIN_RADIUS -m $MIN_SIZE
 logo: vessels.jpg
 params:
  - filetype
