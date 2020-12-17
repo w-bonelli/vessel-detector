@@ -682,15 +682,12 @@ def color_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
-def extract_traits(image_path, min_radius, min_cluster_size):
+def extract_traits(image_path, min_radius, min_cluster_size, output_dir):
     print(image_path)
     image_abs_path = os.path.abspath(image_path)
     image_file_name, img_file_ext = os.path.splitext(image_abs_path)
     image_file_size = os.path.getsize(image_path) / MBFACTOR
     image_file = os.path.splitext(os.path.basename(image_file_name))[0]
-
-    output_dir = join(dirname(dirname(image_path)), 'output')
-    Path(output_dir).mkdir(exist_ok=True)
 
     print(
         f"Extracting traits for image '{image_file}' to '{output_dir}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
@@ -702,9 +699,9 @@ def extract_traits(image_path, min_radius, min_cluster_size):
     else:
         image = cv2.imread(image_path)
 
-    args_colorspace = args['color_space']
-    args_channels = args['channels']
-    args_num_clusters = args['num_clusters']
+    args_colorspace = args['color_space'] if 'color_space' in args else 'lab'
+    args_channels = args['channels'] if 'color_space' in args else 1
+    args_num_clusters = args['num_clusters'] if 'num_clusters' in args else 2
 
     # make backup image
     converted = image.copy()
@@ -776,8 +773,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("-i", "--input", required=True, help="path to input directory (containing image files)")
     parser.add_argument("-o", "--output", required=False, help="path to directory to write output files")
-    parser.add_argument("-r", "--min-radius", required=False, help="minimum vessel radius (pixels, length) to detect")
-    parser.add_argument("-m", "--min-size", required=False, help="minimum vessel size (pixels, area) to detect")
+    parser.add_argument("-r", "--min-radius", type=int, default=15, required=False, help="minimum vessel radius (pixels, length) to detect")
+    parser.add_argument("-m", "--min-size", type=int, default=500, required=False, help="minimum vessel size (pixels, area) to detect")
     parser.add_argument("-ft", "--filetype", required=True, help="Image filetype")
     parser.add_argument('-s', '--color-space', type=str, default='lab',
                         help='Color space to use: BGR (default), HSV, Lab, YCrCb (YCC)')
@@ -789,32 +786,27 @@ if __name__ == '__main__':
                         help='Number of clusters for K-means clustering (default 3, min 2).')
 
     args = vars(parser.parse_args())
+    filetype = args["filetype"]
     input_dir = args["input"]
-    output_dir = args["output"] if 'output' in args else None
-    input_images = sorted(glob.glob(f"{input_dir}/*.{args['filetype']}"))
-    min_radius = args["min_radius"] if 'min_radius' in args else None
-    min_size = args["min_size"] if 'min_size' in args else None
+    output_dir = args["output"] if 'output' in args and args['output'] is not None else 'output'
+    Path(output_dir).mkdir(exist_ok=True)  # create output dir
+    input_dir_pattern = join(input_dir, f"*.{filetype}")
+    print(f"Searching for '{filetype}' images in {input_dir} using pattern " + input_dir_pattern)
+    input_images = sorted(glob.glob(input_dir_pattern))
+    print(f"Found {len(input_images)} images: {input_images}")
+    min_radius = args["min_radius"] if 'min_radius' in args else 15
+    min_size = args["min_size"] if 'min_size' in args else 500
     cpus = multiprocessing.cpu_count()
-
     print(f"Using {int(cpus)} cores to process {len(input_images)} images...")
 
     with closing(Pool(processes=cpus)) as pool:
-        result = pool.starmap(extract_traits, [(image, min_radius, min_size) for image in input_images])
+        result = pool.starmap(extract_traits, [(image, min_radius, min_size, output_dir) for image in input_images])
         pool.terminate()
-
-    # if output dir provided, create it (if needed). otherwise use current directory
-    if output_dir is not None:
-        Path(output_dir).mkdir(exist_ok=True)
-    else:
-        output_dir = ''
 
     trait_file = join(output_dir, 'trait.xlsx')
     print(f"Writing trait file '{trait_file}'...")
 
-    if os.path.isfile(trait_file):
-        wb = load_workbook(trait_file)
-    else:
-        wb = Workbook()
+    wb = load_workbook(trait_file) if os.path.isfile(trait_file) else Workbook()
 
     sheet = wb.active
     sheet.cell(row=1, column=1).value = 'filename'
