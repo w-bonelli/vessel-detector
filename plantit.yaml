@@ -11,6 +11,10 @@ params:
 input:
   kind: directory
   path:
+  patterns:
+    - jpg
+    - png
+    - czi
 output:
   path: output
   include:
