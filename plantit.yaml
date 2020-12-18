@@ -3,15 +3,14 @@ author: Wes Bonelli
 public: True
 clone: True
 image: docker://computationalplantscience/vessel-analysis
-commands: python3 vessel-detector/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE" -r $MIN_RADIUS -m $MIN_SIZE
+commands: python3 vessel-detector/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPES" -r $MIN_RADIUS -m $MIN_SIZE
 params:
- - filetype
  - min_radius=15
  - min_size=500
 input:
   kind: directory
   path:
-  patterns:
+  filetypes:
     - jpg
     - png
     - czi
