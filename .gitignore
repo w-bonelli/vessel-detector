@@ -11,8 +11,9 @@ utils.pyc
 .env
 .bash_history
 .python_history
-*test/
 .cache/*
 tools/__pycache__/
+tests/output
 data
 output*
+*.DS_Store
