@@ -1,38 +1,14 @@
-"""
-Name: trait_extract_parallel.py
-
-Version: 1.0
-
-Summary: Extract plant traits (leaf area, width, height, solidity, curvature) by parallel processing
-
-Author: Suxing Liu
-
-Author-email: suxingliu@gmail.com
-
-Created: 2018-09-29
-
-USAGE:
-
-time python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
-"""
-
-import csv
 import os
 import warnings
 from collections import Counter
 from os.path import join
-from pathlib import Path
 from typing import List
 
-import click
 import cv2
 import czifile
 import imutils
 import matplotlib.pyplot as plt
 import numpy as np
-import yaml
-from openpyxl import Workbook
-from openpyxl import load_workbook
 from scipy import ndimage
 from scipy.interpolate import interp1d
 from scipy.spatial import distance as dist
@@ -183,7 +159,7 @@ def color_cluster(image, args_colorspace, args_channels, args_num_clusters):
     return img_thresh
 
 
-def watershed(orig, thresh, min_distance_value):
+def compute_watershed(orig, thresh, min_distance_value):
     # compute the exact Euclidean distance from every binary
     # pixel to the nearest zero pixel, then find peaks in this
     # distance map
@@ -200,111 +176,50 @@ def watershed(orig, thresh, min_distance_value):
     return labels
 
 
-def find_contours(orig, thresh):
+def find_contours(orig, thresh, output_prefix):
     # find contours and get the external one
     contours, hier = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    img_height, img_width, img_channels = orig.shape
-
-    index = 1
-
-    cnts = []
-
+    contours_image = orig.copy()
+    min_area = 10000
+    max_area = 200000
+    filtered_counters = []
+    i = 1
+    results = []
     for c in contours:
+        i += 1
+        cnt = cv2.approxPolyDP(c, 0.035 * cv2.arcLength(c, True), True)
+        bounding_rect = cv2.boundingRect(cnt)
+        (x, y, w, h) = bounding_rect
+        min_rect = cv2.minAreaRect(cnt)
+        area = cv2.contourArea(c)
+        rect_area = w * h
+        if max_area > area > min_area and abs(area - rect_area) > 0.3:
+            filtered_counters.append(c)
 
-        # get the bounding rect
-        x, y, w, h = cv2.boundingRect(c)
+            # draw and label contours
+            cv2.drawContours(contours_image, [c], 0, (0, 255, 0), 3)
+            cv2.putText(contours_image, str(i), (x + 30, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
 
-        if w > img_width * 0.1 and h > img_height * 0.1:
+            # draw min bounding box
+            # box = np.int0(cv2.boxPoints(min_rect))
+            # cv2.drawContours(contours_image, [box], 0, (0, 0, 255), 2)
 
-            trait_img = cv2.drawContours(orig, contours, -1, (255, 255, 0), 1)
+            # draw min bounding box
+            # box = np.int0(cv2.boxPoints(bounding_rect))
+            # cv2.drawContours(contours_image, [bounding_rect], 0, (0, 0, 255), 2)
 
-            # draw a green rectangle to visualize the bounding rect
-            roi = orig[y:y + h, x:x + w]
-
-            print(f"ROI {index} detected ...")
-            # result_file = (save_path +  str(index) + file_extension)
-            # cv2.imwrite(result_file, roi)
-
-            trait_img = cv2.rectangle(orig, (x, y), (x + w, y + h), (255, 255, 0), 3)
-
-            index += 1
-
-            '''
-            #get the min area rect
-            rect = cv2.minAreaRect(c)
-            box = cv2.boxPoints(rect)
-            # convert all coordinates floating point values to int
-            box = np.int0(box)
-            #draw a red 'nghien' rectangle
-            trait_img = cv2.drawContours(orig, [box], 0, (0, 0, 255))
-            '''
-            # get convex hull
-            hull = cv2.convexHull(c)
-            # draw it in red color
-            trait_img = cv2.drawContours(orig, [hull], -1, (0, 0, 255), 3)
-
-            '''
-            # calculate epsilon base on contour's perimeter
-            # contour's perimeter is returned by cv2.arcLength
-            epsilon = 0.01 * cv2.arcLength(c, True)
-            # get approx polygons
-            approx = cv2.approxPolyDP(c, epsilon, True)
-            # draw approx polygons
-            trait_img = cv2.drawContours(orig, [approx], -1, (0, 255, 0), 1)
-         
-            # hull is convex shape as a polygon
-            hull = cv2.convexHull(c)
-            trait_img = cv2.drawContours(orig, [hull], -1, (0, 0, 255))
-            '''
-
-            '''
-            #get the min enclosing circle
-            (x, y), radius = cv2.minEnclosingCircle(c)
-            # convert all values to int
-            center = (int(x), int(y))
-            radius = int(radius)
-            # and draw the circle in blue
-            trait_img = cv2.circle(orig, center, radius, (255, 0, 0), 2)
-            '''
-
-            area = cv2.contourArea(c)
-            print("Area: {0:.2f} ".format(area))
-
-            hull = cv2.convexHull(c)
-            hull_area = cv2.contourArea(hull)
-            solidity = float(area) / hull_area
-            print("Solidity: {0:.2f} ".format(solidity))
-
-            extLeft = tuple(c[c[:, :, 0].argmin()][0])
-            extRight = tuple(c[c[:, :, 0].argmax()][0])
-            extTop = tuple(c[c[:, :, 1].argmin()][0])
-            extBot = tuple(c[c[:, :, 1].argmax()][0])
-
-            trait_img = cv2.circle(orig, extLeft, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extRight, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extTop, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extBot, 3, (255, 0, 0), -1)
-
-            max_width = dist.euclidean(extLeft, extRight)
-            max_height = dist.euclidean(extTop, extBot)
-
-            if max_width > max_height:
-                trait_img = cv2.line(orig, extLeft, extRight, (0, 255, 0), 2)
-            else:
-                trait_img = cv2.line(orig, extTop, extBot, (0, 255, 0), 2)
-
-            print("Width, Height: {0:.2f}, {1:.2f} ".format(w, h))
-
-            cnts.append(VesselDetectorResult(
-                id=trait_img,
+            result = VesselDetectorResult(
+                id=str(i),
                 area=area,
-                solidity=solidity,
-                max_width=w,
-                max_height=h))
-        # return None, None, None, w, h
+                solidity=min(round(area / rect_area, 4), 1),
+                max_height=h,
+                max_width=w)
+            results.append(result)
 
-    return cnts
+    print(f"Kept {len(filtered_counters)} of {len(contours)} total contours")
+    cv2.imwrite(f"{output_prefix}.contours.png", contours_image)
+
+    return results
 
 
 def compute_curvature(image, labels, grayscale=False, min_radius=10):
@@ -312,6 +227,8 @@ def compute_curvature(image, labels, grayscale=False, min_radius=10):
     label_trait = None
     curv_sum = 0.0
     count = 0
+    results = []
+
     # curvature computation
     # loop over the unique labels returned by the Watershed algorithm
     for index, label in enumerate(np.unique(labels), start=1):
@@ -339,12 +256,18 @@ def compute_curvature(image, labels, grayscale=False, min_radius=10):
         # cv2.putText(orig, "#{}".format(curvature), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
 
         if len(c) >= 5:
-            label_trait = cv2.drawContours(image, [c], -1, (255, 0, 0), 2)
+            # draw and label contours
+            cv2.drawContours(image, [c], 0, (0, 255, 0), 3)
+            # cv2.putText(image, str(count), (x + 30, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             ellipse = cv2.fitEllipse(c)
             label_trait = cv2.ellipse(image, ellipse, (0, 255, 0), 2)
 
             c_np = np.vstack(c).squeeze()
             count += 1
+            area = cv2.contourArea(c)
+            bounding_rect = cv2.boundingRect(c)
+            (x, y, w, h) = bounding_rect
+            rect_area = w * h
 
             x = c_np[:, 0]
             y = c_np[:, 1]
@@ -354,9 +277,16 @@ def compute_curvature(image, labels, grayscale=False, min_radius=10):
 
             curv_sum = curv_sum + curvature
 
+            result = VesselDetectorResult(
+                id=str(count),
+                area=area,
+                solidity=min(round(area / rect_area, 4), 1),
+                max_height=h,
+                max_width=w)
+            results.append(result)
         else:
             # optional to "delete" the small contours
-            label_trait = cv2.drawContours(image, [c], -1, (0, 0, 255), 2)
+            label_trait = cv2.drawContours(image, [c], 0, (0, 255, 0), 3)
             print("Not enough points to fit ellipse")
 
     if count != 0:
@@ -364,7 +294,7 @@ def compute_curvature(image, labels, grayscale=False, min_radius=10):
     else:
         print("Can't find average curvature, no contours found")
 
-    return curv_sum / count if count != 0 else 0, label_trait
+    return curv_sum / count if count != 0 else 0, label_trait, results
 
 
 def RGB2HEX(color):
@@ -691,6 +621,7 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
     image_file_name, img_file_ext = os.path.splitext(image_abs_path)
     image_file_size = os.path.getsize(options.input_file) / MBFACTOR
     image_file = os.path.splitext(os.path.basename(image_file_name))[0]
+    output_prefix = join(options.output_directory, options.input_stem)
 
     print(
         f"Extracting traits for image '{image_file}' to '{options.output_directory}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
@@ -741,13 +672,7 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
 
     min_distance_value = 5
     # watershed based leaf area segmentaiton
-    labels = watershed(converted, thresh, min_distance_value)
-    results = []
-    i = 1
-    for label in labels:
-        lbl = join(options.output_directory, f"vessel{i}{img_file_ext}")
-        i += 1
-        cv2.imwrite(lbl, label)
+    labels = compute_watershed(converted, thresh, min_distance_value)
 
     # save watershed result label image
     # Map component labels to hue val
@@ -761,11 +686,14 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
 
     # find curvature
     if options.min_radius is not None:
-        (avg_curv, label_trait) = compute_curvature(converted, labels, image.shape[2] == 1, int(options.min_radius))
+        (avg_curv, label_trait, results) = compute_curvature(converted, labels, image.shape[2] == 1, int(options.min_radius))
     else:
-        (avg_curv, label_trait) = compute_curvature(converted, labels, image.shape[2] == 1)
+        (avg_curv, label_trait, results) = compute_curvature(converted, labels, image.shape[2] == 1)
     if label_trait is not None:
         curv = join(options.output_directory, f"{image_file}_curv{img_file_ext}")
         cv2.imwrite(curv, label_trait)
+
+    # find contours
+    # results = find_contours(image.copy(), thresh, output_prefix)
 
     return results

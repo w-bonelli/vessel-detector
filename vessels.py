@@ -50,7 +50,7 @@ def cli(input_file, output_directory, min_radius, min_size):
     sheet.cell(row=1, column=5).value = 'max_height'
     sheet.cell(row=1, column=6).value = 'curvature'
     for result in results:
-        sheet.append(result)
+        sheet.append([result.id, result.area, result.solidity, result.max_height, result.max_width, result.curvature])
     wb.save(excel_path)
 
 
