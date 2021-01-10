@@ -617,14 +617,8 @@ def color_region(image, mask, output_dir, num_clusters):
 
 
 def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]:
-    image_abs_path = os.path.abspath(options.input_file)
-    image_file_name, img_file_ext = os.path.splitext(image_abs_path)
-    image_file_size = os.path.getsize(options.input_file) / MBFACTOR
-    image_file = os.path.splitext(os.path.basename(image_file_name))[0]
     output_prefix = join(options.output_directory, options.input_stem)
-
-    print(
-        f"Extracting traits for image '{image_file}' to '{options.output_directory}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
+    print(f"Extracting traits from image '{options.input_file}'")
 
     if options.input_file.endswith('.czi'):
         image = czifile.imread(options.input_file)
