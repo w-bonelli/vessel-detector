@@ -2,7 +2,7 @@ name: Vessel Detector
 author: Wes Bonelli
 public: True
 clone: True
-image: docker://computationalplantscience/vessel-analysis
+image: docker://wbonelli/vessel-detector
 commands: python3 vessel-detector/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPES" -r $MIN_RADIUS -m $MIN_SIZE
 params:
  - min_radius=15
