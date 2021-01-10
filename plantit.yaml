@@ -3,7 +3,7 @@ author: Wes Bonelli
 public: True
 clone: True
 image: docker://wbonelli/vessel-detector
-commands: python3 vessel-detector/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPES" -r $MIN_RADIUS -m $MIN_SIZE
+commands: python3 vessel-detector/vessels.py "$INPUT" -mr $MIN_RADIUS -ms $MIN_SIZE
 params:
  - min_radius=15
  - min_size=500
