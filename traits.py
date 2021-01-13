@@ -618,12 +618,12 @@ def color_region(image, mask, output_dir, num_clusters):
 
 def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]:
     output_prefix = join(options.output_directory, options.input_stem)
+    img_file_ext = '.jpg'
     print(f"Extracting traits from image '{options.input_file}'")
 
     if options.input_file.endswith('.czi'):
         image = czifile.imread(options.input_file)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        img_file_ext = '.jpg'
     else:
         image = cv2.imread(options.input_file)
 
@@ -633,7 +633,7 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
 
     # make backup image
     converted = image.copy()
-    cv2.imwrite(join(options.output_directory, f"{image_file}_cvt{img_file_ext}"), converted)
+    cv2.imwrite(join(options.output_directory, f"{options.input_stem}_cvt{img_file_ext}"), converted)
 
     # add color channels if it's a grayscale image
     if image.shape[2] == 1:
@@ -645,15 +645,15 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
         thresh = color_cluster(converted, args_colorspace, args_channels, args_num_clusters)
 
     # save segmentation result
-    seg = join(options.output_directory, f"{image_file}_seg{img_file_ext}")
+    seg = join(options.output_directory, f"{options.input_stem}_seg{img_file_ext}")
     cv2.imwrite(seg, thresh)
 
     num_clusters = 5
     if image.shape[2] == 1:
-        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(options.output_directory, image_file),
+        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(options.output_directory, options.input_file),
                                       num_clusters)
     else:
-        rgb_colors = color_region(converted, thresh, join(options.output_directory, image_file), num_clusters)
+        rgb_colors = color_region(converted, thresh, join(options.output_directory, options.input_file), num_clusters)
 
     print("Color difference:")
     selected_color = rgb2lab(np.uint8(np.asarray([[rgb_colors[0]]])))
@@ -684,7 +684,7 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
     else:
         (avg_curv, label_trait, results) = compute_curvature(converted, labels, image.shape[2] == 1)
     if label_trait is not None:
-        curv = join(options.output_directory, f"{image_file}_curv{img_file_ext}")
+        curv = join(options.output_directory, f"{options.input_stem}_curv{img_file_ext}")
         cv2.imwrite(curv, label_trait)
 
     # find contours
