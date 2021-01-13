@@ -18,3 +18,4 @@ tests/__pycache__/
 data
 output*
 *.DS_Store
+.coverage

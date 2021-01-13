@@ -35,6 +35,7 @@ def cli(input_file, output_directory, min_radius, min_size):
     print(f"Writing CSV file: {csv_path}")
     with open(csv_path, 'w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
+        writer.writerow(['ID', 'Area', 'Solidity', 'Max Width', 'Max Height', 'Curvature'])
         for result in results:
             writer.writerow([result.id, result.area, result.solidity, result.max_height, result.max_width, result.curvature])
 

@@ -50,7 +50,7 @@ def test_gaussian_adaptive_threshold(test_image):
     assert np.shape(image)[0] == np.shape(thresholded)[0]
     assert np.shape(image)[1] == np.shape(thresholded)[1]
 
-    imageio.imwrite(join(test_dir, 'output', f"{options.input_stem}.threshold.adaptive.gaussian.test.png"), thresholded)
+    imageio.imwrite(join(test_dir, 'output', f"{options.input_stem}.threshold.adaptive.test.png"), thresholded)
 
 
 @pytest.mark.parametrize("test_image", test_images)

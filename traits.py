@@ -1,3 +1,4 @@
+import math
 import os
 import warnings
 from collections import Counter
@@ -6,6 +7,7 @@ from typing import List
 
 import cv2
 import czifile
+import imageio
 import imutils
 import matplotlib.pyplot as plt
 import numpy as np
@@ -27,7 +29,10 @@ warnings.filterwarnings("ignore")
 MBFACTOR = float(1 << 20)
 
 
-def grayscale_cluster(image, args_colorspace, args_channels, args_num_clusters, min_cluster_size=500):
+def grayscale_cluster(image, args_num_clusters, min_cluster_size=500):
+    # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
+    # grayscale clustering based plant object segmentation
+
     # clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
     # image = clahe.apply(image)  # apply CLAHE to the L-channel
     # image = cv2.equalizeHist(image)
@@ -617,16 +622,63 @@ def color_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
+def find_contours(
+        threshold_image: np.ndarray,
+        color_image: np.ndarray,
+        options: VesselDetectorOptions) -> List[VesselDetectorResult]:
+    contours, hierarchy = cv2.findContours(threshold_image.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_image = color_image.copy()
+    min_area = math.pi * (options.min_radius ** 2)
+    max_area = math.pi * ((options.min_radius * 100) ** 2)
+    filtered_counters = []
+    results = []
+    i = 0
+    for contour in contours:
+        i += 1
+        cnt = cv2.approxPolyDP(contour, 0.035 * cv2.arcLength(contour, True), True)
+        bounding_rect = cv2.boundingRect(cnt)
+        (x, y, w, h) = bounding_rect
+        min_rect = cv2.minAreaRect(cnt)
+        area = cv2.contourArea(contour)
+        rect_area = w * h
+        if max_area > area > min_area:
+            filtered_counters.append(contour)
+
+            # draw and label contours
+            cv2.drawContours(contours_image, [contour], 0, (0, 255, 0), 3)
+            cv2.putText(contours_image, str(i), (x + 30, y + 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+
+            # draw min bounding box
+            # box = np.int0(cv2.boxPoints(min_rect))
+            # cv2.drawContours(contours_image, [box], 0, (0, 0, 255), 2)
+
+            # draw min bounding box
+            # box = np.int0(cv2.boxPoints(bounding_rect))
+            # cv2.drawContours(contours_image, [bounding_rect], 0, (0, 0, 255), 2)
+
+            result = VesselDetectorResult(
+                id=str(i),
+                area=area,
+                solidity=min(round(area / rect_area, 4), 1),
+                max_height=h,
+                max_width=w)
+            results.append(result)
+
+    return contours, contours_image, results
+
+
 def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]:
     output_prefix = join(options.output_directory, options.input_stem)
-    img_file_ext = '.jpg'
     print(f"Extracting traits from image '{options.input_file}'")
 
+    # read image
     if options.input_file.endswith('.czi'):
         image = czifile.imread(options.input_file)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
+        color_image = None
     else:
         image = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
+        color_image = cv2.imread(options.input_file)
 
     args_colorspace = 'lab'
     args_channels = 1
@@ -635,30 +687,50 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
     # make backup image
     image_copy = image.copy()
 
+    # enhance contrast
+    print("Enhancing contrast")
+    clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
+    enhanced = clahe.apply(image_copy)  # apply CLAHE to the L-channel
+    enhanced = cv2.equalizeHist(enhanced)
+    enhanced = cv2.medianBlur(enhanced, 3)
+    enhanced = cv2.filter2D(enhanced, -1, np.ones((5, 5), np.float32) / 25)
+    cv2.imwrite(f"{output_prefix}.enhanced.png", enhanced)
+
     # simple threshold
+    print("Applying simple binary threshold")
     threshold_simple = simple_threshold(image_copy)
     cv2.imwrite(f"{output_prefix}.threshold.simple.png", threshold_simple)
 
-    # adaptive gaussian threshold
-    threshold_gaussian = adaptive_threshold_gaussian(image_copy)
-    cv2.imwrite(f"{output_prefix}.threshold.adaptive.gaussian.png", threshold_gaussian)
+    # dilation/erosion/closing
+    # print(f"Dilating, eroding, and closing image")
+    # kernel = np.ones((7, 7), np.uint8)
+    # dilated_image = cv2.dilate(threshold_simple.copy(), kernel, iterations=1)
+    # eroded_image = cv2.erode(threshold_simple.copy(), kernel, iterations=1)
+    # closed_image = cv2.morphologyEx(dilated_image.copy(), cv2.MORPH_CLOSE, kernel)
+    # cv2.imwrite(f"{output_prefix}.threshold.simple.dilated.png", dilated_image)
+    # cv2.imwrite(f"{output_prefix}.threshold.simple.eroded.png", eroded_image)
+    # cv2.imwrite(f"{output_prefix}.threshold.simple.closed.png", closed_image)
 
-    # otsu threshold
+    # simple threshold edge detection
+    print(f"Finding edges in simple binary mask")
+    edges_simple = cv2.Canny(threshold_simple.copy(), 100, 200)
+    cv2.imwrite(f"{output_prefix}.threshold.simple.edges.png", edges_simple)
+
+    # simple threshold contour detection
+    print(f"Finding contours in simple binary mask")
+    contours_simple, contoured_simple, results = find_contours(threshold_simple.copy(), color_image.copy(), options)
+    print(f"Found {len(contours_simple)} contours in simple binary mask")
+    cv2.imwrite(f"{output_prefix}.threshold.simple.contours.png", contoured_simple)
+
+    # adaptive threshold
+    print("Applying adaptive threshold")
+    threshold_gaussian = adaptive_threshold_gaussian(image_copy)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.png", threshold_gaussian)
+
+    # OTSU threshold
+    print("Applying OTSU threshold")
     threshold_otsu = otsu_threshold(image_copy)
     cv2.imwrite(f"{output_prefix}.threshold.otsu.png", threshold_otsu)
-
-    # add color channels if it's a grayscale image
-    # if image.shape[2] == 1:
-    #     # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
-    #     # grayscale clustering based plant object segmentation
-    #     thresh = grayscale_cluster(image_copy, args_colorspace, args_channels, args_num_clusters, int(options.min_cluster_size))
-    # else:
-    #     # color clustering based plant object segmentation
-    #     thresh = color_cluster(image_copy, args_colorspace, args_channels, args_num_clusters)
-
-    # # save segmentation result
-    # seg = join(options.output_directory, f"{options.input_stem}_seg{img_file_ext}")
-    # cv2.imwrite(seg, thresh)
 
     # num_clusters = 5
     # if image.shape[2] == 1:
@@ -702,4 +774,4 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
     # find contours
     # results = find_contours(image.copy(), thresh, output_prefix)
 
-    return [VesselDetectorResult(id=options.input_stem)]
+    return results
