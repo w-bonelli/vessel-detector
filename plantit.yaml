@@ -15,7 +15,7 @@ input:
     - png
     - czi
 output:
-  path: output
+  path:
   include:
     patterns:
       - xlsx
