@@ -1,5 +1,7 @@
 # Vessel Detector
 
+[![Coverage Status](https://coveralls.io/repos/github/w-bonelli/vessel-detector/badge.svg?branch=master)](https://coveralls.io/github/w-bonelli/vessel-detector?branch=master)
+
 Detects injection-filled and empty vessels in stem tissues.
 
 Author: Suxing Liu (adapted by Wes Bonelli)
