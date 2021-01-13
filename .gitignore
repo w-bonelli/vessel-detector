@@ -14,6 +14,7 @@ utils.pyc
 .cache/*
 tools/__pycache__/
 tests/output
+tests/__pycache__/
 data
 output*
 *.DS_Store

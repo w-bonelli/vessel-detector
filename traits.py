@@ -19,6 +19,7 @@ from sklearn.cluster import KMeans
 
 from options import VesselDetectorOptions
 from results import VesselDetectorResult
+from thresholding import otsu_threshold, adaptive_threshold_gaussian, adaptive_threshold_mean, simple_threshold
 from tools.curvature import ComputeCurvature
 
 warnings.filterwarnings("ignore")
@@ -625,69 +626,80 @@ def extract_traits(options: VesselDetectorOptions) -> List[VesselDetectorResult]
         image = czifile.imread(options.input_file)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
     else:
-        image = cv2.imread(options.input_file)
+        image = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
 
     args_colorspace = 'lab'
     args_channels = 1
     args_num_clusters = 2
 
     # make backup image
-    converted = image.copy()
-    cv2.imwrite(join(options.output_directory, f"{options.input_stem}_cvt{img_file_ext}"), converted)
+    image_copy = image.copy()
+
+    # simple threshold
+    threshold_simple = simple_threshold(image_copy)
+    cv2.imwrite(f"{output_prefix}.threshold.simple.png", threshold_simple)
+
+    # adaptive gaussian threshold
+    threshold_gaussian = adaptive_threshold_gaussian(image_copy)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.gaussian.png", threshold_gaussian)
+
+    # otsu threshold
+    threshold_otsu = otsu_threshold(image_copy)
+    cv2.imwrite(f"{output_prefix}.threshold.otsu.png", threshold_otsu)
 
     # add color channels if it's a grayscale image
-    if image.shape[2] == 1:
-        # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
-        # grayscale clustering based plant object segmentation
-        thresh = grayscale_cluster(converted, args_colorspace, args_channels, args_num_clusters, int(options.min_cluster_size))
-    else:
-        # color clustering based plant object segmentation
-        thresh = color_cluster(converted, args_colorspace, args_channels, args_num_clusters)
+    # if image.shape[2] == 1:
+    #     # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
+    #     # grayscale clustering based plant object segmentation
+    #     thresh = grayscale_cluster(image_copy, args_colorspace, args_channels, args_num_clusters, int(options.min_cluster_size))
+    # else:
+    #     # color clustering based plant object segmentation
+    #     thresh = color_cluster(image_copy, args_colorspace, args_channels, args_num_clusters)
 
-    # save segmentation result
-    seg = join(options.output_directory, f"{options.input_stem}_seg{img_file_ext}")
-    cv2.imwrite(seg, thresh)
+    # # save segmentation result
+    # seg = join(options.output_directory, f"{options.input_stem}_seg{img_file_ext}")
+    # cv2.imwrite(seg, thresh)
 
-    num_clusters = 5
-    if image.shape[2] == 1:
-        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(options.output_directory, options.input_file),
-                                      num_clusters)
-    else:
-        rgb_colors = color_region(converted, thresh, join(options.output_directory, options.input_file), num_clusters)
+    # num_clusters = 5
+    # if image.shape[2] == 1:
+    #     rgb_colors = grayscale_region(image_copy.astype(dtype=np.uint8), thresh, join(options.output_directory, options.input_file),
+    #                                   num_clusters)
+    # else:
+    #     rgb_colors = color_region(image_copy, thresh, join(options.output_directory, options.input_file), num_clusters)
 
-    print("Color difference:")
-    selected_color = rgb2lab(np.uint8(np.asarray([[rgb_colors[0]]])))
+    # print("Color difference:")
+    # selected_color = rgb2lab(np.uint8(np.asarray([[rgb_colors[0]]])))
 
-    for index, value in enumerate(rgb_colors):
-        # print(index, value)
-        curr_color = rgb2lab(np.uint8(np.asarray([[value]])))
-        diff = deltaE_cie76(selected_color, curr_color)
-        print(index, value, diff)
+    # for index, value in enumerate(rgb_colors):
+    #     # print(index, value)
+    #     curr_color = rgb2lab(np.uint8(np.asarray([[value]])))
+    #     diff = deltaE_cie76(selected_color, curr_color)
+    #     print(index, value, diff)
 
-    min_distance_value = 5
-    # watershed based leaf area segmentaiton
-    labels = compute_watershed(converted, thresh, min_distance_value)
+    # min_distance_value = 5
+    # # watershed based leaf area segmentaiton
+    # labels = compute_watershed(image_copy, thresh, min_distance_value)
 
-    # save watershed result label image
-    # Map component labels to hue val
-    label_hue = np.uint8(128 * labels / np.max(labels))
-    # label_hue[labels == largest_label] = np.uint8(15)
-    blank_ch = 255 * np.ones_like(label_hue)
-    labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
+    # # save watershed result label image
+    # # Map component labels to hue val
+    # label_hue = np.uint8(128 * labels / np.max(labels))
+    # # label_hue[labels == largest_label] = np.uint8(15)
+    # blank_ch = 255 * np.ones_like(label_hue)
+    # labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
 
-    # cvt to BGR for display
-    labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
+    # # cvt to BGR for display
+    # labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
 
-    # find curvature
-    if options.min_radius is not None:
-        (avg_curv, label_trait, results) = compute_curvature(converted, labels, image.shape[2] == 1, int(options.min_radius))
-    else:
-        (avg_curv, label_trait, results) = compute_curvature(converted, labels, image.shape[2] == 1)
-    if label_trait is not None:
-        curv = join(options.output_directory, f"{options.input_stem}_curv{img_file_ext}")
-        cv2.imwrite(curv, label_trait)
+    # # find curvature
+    # if options.min_radius is not None:
+    #     (avg_curv, label_trait, results) = compute_curvature(image_copy, labels, image.shape[2] == 1, int(options.min_radius))
+    # else:
+    #     (avg_curv, label_trait, results) = compute_curvature(image_copy, labels, image.shape[2] == 1)
+    # if label_trait is not None:
+    #     curv = join(options.output_directory, f"{options.input_stem}_curv{img_file_ext}")
+    #     cv2.imwrite(curv, label_trait)
 
     # find contours
     # results = find_contours(image.copy(), thresh, output_prefix)
 
-    return results
+    return [VesselDetectorResult(id=options.input_stem)]
