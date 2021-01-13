@@ -20,10 +20,10 @@ docker run -it -v "$PWD":/opt/dev -w /opt/dev wbonelli/vessel-detector python3 -
 
 ### Docker
 
-To invoke `vessel-detector` with Docker, run something like:
+To run with Docker, use a command like:
 
 ```bash
-docker run -it -v "$PWD":/opt/dev -w /opt/dev wbonelli/vessel-detector python3 vessels.py <input file> -o <output directory> -r 15 -c 500
+docker run -t -v "$PWD":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vessels.py <input file> -o <output directory>
 ```
 
 ### Singularity

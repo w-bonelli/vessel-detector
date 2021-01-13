@@ -33,7 +33,6 @@ jobs:
           COVERALLS_PARALLEL: true
         run: |
           docker run -t -e COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN -e COVERALLS_PARALLEL=$COVERALLS_PARALLEL -v "$PWD":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector coverage run --source="/opt/vessel-detector/" -m pytest -s && coveralls
-          docker run -t -v "$PWD":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vessels.py tests/data/ploc-10-1-1.jpg -o tests/output
       - name: Slack end notification
         uses: rtCamp/action-slack-notify@v2
         env:
