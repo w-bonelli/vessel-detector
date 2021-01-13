@@ -8,7 +8,7 @@ params:
  - min_radius=15
  - min_size=500
 input:
-  kind: directory
+  kind: files
   path:
   filetypes:
     - jpg
