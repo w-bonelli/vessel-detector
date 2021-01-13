@@ -1,9 +1,9 @@
 name: Vessel Detector
 author: Wes Bonelli
 public: True
-clone: True
+clone: False
 image: docker://wbonelli/vessel-detector
-commands: python3 vessel-detector/vessels.py "$INPUT" -mr $MIN_RADIUS -ms $MIN_SIZE
+commands: python3 /opt/vessel-detector/vessels.py "$INPUT" -mr $MIN_RADIUS -ms $MIN_SIZE
 params:
  - min_radius=15
  - min_size=500
@@ -21,9 +21,10 @@ output:
       - xlsx
       - png
       - jpg
+      - png
 logo: vessels.jpg
 resources:
-  time: "05:00:00"
-  mem: "20GB"
+  time: "01:00:00"
+  mem: "10GB"
   tasks: 1
-  cores: 12
+  cores: 1
