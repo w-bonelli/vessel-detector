@@ -34,6 +34,15 @@ jobs:
           COVERALLS_PARALLEL: true
         run: |
           docker run -t -e COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN -e COVERALLS_PARALLEL=$COVERALLS_PARALLEL -v "$PWD":/opt/dev -w /opt/dev wbonelli/vessel-detector coverage run --source="/opt/dev/" -m pytest -s && coveralls
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: test_output
+          path: |
+            tests/output/*.csv
+            tests/output/*.yml
+            tests/output/*.jpg
+            tests/output/*.png
       - name: Slack end notification
         uses: rtCamp/action-slack-notify@v2
         env:
