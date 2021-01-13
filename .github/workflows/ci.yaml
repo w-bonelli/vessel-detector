@@ -15,6 +15,7 @@ jobs:
           SLACK_TITLE: Vessel Detector CI
           SLACK_USERNAME: vessel-detector
   unit-tests:
+    needs: [notify-start]
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
@@ -48,6 +49,7 @@ jobs:
           coverage run --source=vessel-detector -m pytest /home/runner/work/vessel-detector/vessel-detector/tests -s
           coveralls
   integration-tests:
+    needs: [unit-tests]
     runs-on: ubuntu-latest
     strategy:
       max-parallel: 1
@@ -76,6 +78,7 @@ jobs:
         run: |
           docker run -t -e COVERALLS_REPO_TOKEN=$COVERALLS_REPO_TOKEN -e COVERALLS_PARALLEL=$COVERALLS_PARALLEL -v $PWD:/opt/dev -w /opt/dev wbonelli/vessel-detector coverage run --source="/opt/dev/" -m pytest -s && coveralls
   notify-succeeded:
+    needs: [integration-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
