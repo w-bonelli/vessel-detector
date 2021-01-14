@@ -2,6 +2,7 @@ from pathlib import Path
 
 import click
 
+from explore import explore1
 from options import VesselDetectorOptions
 from traits import extract_traits
 
@@ -19,7 +20,7 @@ def cli(input_file, output_directory, min_radius, min_size):
         min_radius=min_radius,
         min_cluster_size=min_size)
 
-    extract_traits(options)
+    explore1(options)
 
 
 if __name__ == '__main__':
