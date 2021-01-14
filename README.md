@@ -15,15 +15,15 @@ Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/sin
 A good way to get started is to run the tests:
 
 ```shell
-docker run -it -v "$PWD":/opt/dev -w /opt/dev wbonelli/vessel-detector python3 -m pytest -s
+docker run -it -v "$(pwd)":/opt/dev -w /opt/dev wbonelli/vessel-detector python3 -m pytest -s
 ```
 
 ### Docker
 
 To run with Docker, use a command like:
 
-```bash
-docker run -t -v "$PWD":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vessels.py <input file> -o <output directory>
+```shell
+docker run -t -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vessels.py <input file> -o <output directory>
 ```
 
 ### Singularity

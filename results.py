@@ -5,11 +5,9 @@ class VesselDetectorResult:
             area: float = None,
             solidity: float = None,
             max_width: int = None,
-            max_height: int = None,
-            curvature: float = None):
+            max_height: int = None):
         self.id = id
         self.area = area
         self.solidity = solidity
         self.max_width = max_width
         self.max_height = max_height
-        self.curvature = curvature

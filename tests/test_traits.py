@@ -1,3 +1,4 @@
+from glob import glob
 from os.path import join
 from pathlib import Path
 
@@ -8,18 +9,16 @@ from traits import extract_traits
 
 test_dir = Path(__file__).parent
 output_dir = join(test_dir, 'output')
+data_dir = join(test_dir, 'data')
 Path(output_dir).mkdir(parents=True, exist_ok=True)
-test_images = [
-    'ploc-10-1-1.jpg',
-    # 'ploc-10-1-1.czi'
-]
+test_images = glob(join(data_dir, '*.jpg')) # .extend(glob('*.czi'))
 
 
 @pytest.mark.parametrize("image_file", test_images)
 def test_grayscale_region(image_file):
     options = VesselDetectorOptions(
-        input_file=join(test_dir, 'data', image_file),
-        output_directory=join(test_dir, 'output'))
+        input_file=join(data_dir, image_file),
+        output_directory=output_dir)
     output_prefix = join(options.output_directory, options.input_stem)
     pass
 
@@ -51,7 +50,7 @@ def test_compute_curvature():
 @pytest.mark.parametrize("image_file", test_images)
 def test_extract_traits(image_file):
     options = VesselDetectorOptions(
-        input_file=join(test_dir, 'data', image_file),
-        output_directory=join(test_dir, 'output'))
-    output_prefix = join(options.output_directory, options.input_stem)
-    results = extract_traits(options)
+        input_file=join(data_dir, image_file),
+        output_directory=output_dir)
+
+    extract_traits(options)
