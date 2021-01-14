@@ -136,26 +136,16 @@ def find_contours(
     return contours_image, results
 
 
-def extract_traits(options: VesselDetectorOptions):
-    output_prefix = join(options.output_directory, options.input_stem)
-    print(f"Extracting traits from image '{options.input_file}'")
-
-    # read image
-    if options.input_file.endswith('.czi'):
-        image = czifile.imread(options.input_file)
-        image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        color_image = None
-    else:
-        image = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
-        color_image = cv2.imread(options.input_file)
-
-    # make backup image
-    image_copy = image.copy()
+def extract_traits_internal(
+        grayscale_image: np.ndarray,
+        color_image: np.ndarray,
+        options: VesselDetectorOptions,
+        output_prefix: str):
 
     # enhance contrast
     print("Enhancing contrast")
     clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
-    enhanced = clahe.apply(image_copy)  # apply CLAHE to the L-channel
+    enhanced = clahe.apply(grayscale_image)  # apply CLAHE to the L-channel
     enhanced = cv2.equalizeHist(enhanced)
     enhanced = cv2.medianBlur(enhanced, 3)
     enhanced = cv2.filter2D(enhanced, -1, np.ones((5, 5), np.float32) / 25)
@@ -163,18 +153,8 @@ def extract_traits(options: VesselDetectorOptions):
 
     # simple threshold
     print("Applying simple binary threshold")
-    threshold_simple = simple_threshold(image_copy)
+    threshold_simple = simple_threshold(grayscale_image)
     cv2.imwrite(f"{output_prefix}.threshold.simple.png", threshold_simple)
-
-    # dilation/erosion/closing
-    # print(f"Dilating, eroding, and closing image")
-    # kernel = np.ones((7, 7), np.uint8)
-    # dilated_image = cv2.dilate(threshold_simple.copy(), kernel, iterations=1)
-    # eroded_image = cv2.erode(threshold_simple.copy(), kernel, iterations=1)
-    # closed_image = cv2.morphologyEx(dilated_image.copy(), cv2.MORPH_CLOSE, kernel)
-    # cv2.imwrite(f"{output_prefix}.threshold.simple.dilated.png", dilated_image)
-    # cv2.imwrite(f"{output_prefix}.threshold.simple.eroded.png", eroded_image)
-    # cv2.imwrite(f"{output_prefix}.threshold.simple.closed.png", closed_image)
 
     # simple threshold edge detection
     print(f"Finding edges in simple binary mask")
@@ -189,7 +169,7 @@ def extract_traits(options: VesselDetectorOptions):
 
     # adaptive threshold
     print("Applying adaptive threshold")
-    threshold_adaptive = adaptive_threshold_gaussian(image_copy)
+    threshold_adaptive = adaptive_threshold_gaussian(grayscale_image)
     cv2.imwrite(f"{output_prefix}.threshold.adaptive.png", threshold_adaptive)
 
     # adaptive threshold contour detection
@@ -198,9 +178,25 @@ def extract_traits(options: VesselDetectorOptions):
     cv2.imwrite(f"{output_prefix}.threshold.adaptive.contours.png", contoured_adaptive)
     write_results(results, options, f"{output_prefix}.threshold.adaptive.contours")
 
+    # dilation/erosion/closing
+    print(f"Dilating, eroding, and closing image")
+    kernel = np.ones((7, 7), np.uint8)
+    dilated_image = cv2.dilate(threshold_adaptive.copy(), kernel, iterations=1)
+    eroded_image = cv2.erode(threshold_adaptive.copy(), kernel, iterations=1)
+    closed_image = cv2.morphologyEx(dilated_image.copy(), cv2.MORPH_CLOSE, kernel)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.dilated.png", dilated_image)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.eroded.png", eroded_image)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.closed.png", closed_image)
+
+    # closed adaptive threshold contour detection
+    print(f"Finding contours in closed adaptive mask")
+    contoured_adaptive_closed, results = find_contours(closed_image.copy(), color_image.copy(), options)
+    cv2.imwrite(f"{output_prefix}.threshold.adaptive.closed.contours.png", contoured_adaptive_closed)
+    write_results(results, options, f"{output_prefix}.threshold.adaptive.closed.contours")
+
     # OTSU threshold
     print("Applying OTSU threshold")
-    threshold_otsu = otsu_threshold(image_copy)
+    threshold_otsu = otsu_threshold(grayscale_image)
     cv2.imwrite(f"{output_prefix}.threshold.otsu.png", threshold_otsu)
 
     # OTSU threshold contour detection
@@ -208,3 +204,38 @@ def extract_traits(options: VesselDetectorOptions):
     contoured_otsu, results = find_contours(threshold_otsu.copy(), color_image.copy(), options)
     write_results(results, options, f"{output_prefix}.threshold.otsu.contours")
     cv2.imwrite(f"{output_prefix}.threshold.otsu.contours.png", contoured_otsu)
+
+
+def extract_traits(options: VesselDetectorOptions):
+    output_prefix = join(options.output_directory, options.input_stem)
+    print(f"Extracting traits from image '{options.input_file}'")
+
+    # read image
+    if options.input_file.endswith('.czi'):
+        image_grayscale = czifile.imread(options.input_file)
+        image_grayscale.shape = (image_grayscale.shape[2], image_grayscale.shape[3], image_grayscale.shape[4])  # drop first 2 columns
+        image_color = None
+    else:
+        image_grayscale = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
+        image_color = cv2.imread(options.input_file)
+
+    # invert images
+    inverted_grayscale = cv2.bitwise_not(image_grayscale.copy())
+    inverted_color = cv2.bitwise_not(image_color.copy())
+    cv2.imwrite(f"{output_prefix}.inverted.png", inverted_grayscale)
+    cv2.imwrite(f"{output_prefix}.inverted.color.png", inverted_color)
+
+    # extract traits from original
+    extract_traits_internal(
+        grayscale_image=image_grayscale.copy(),
+        color_image=image_color.copy(),
+        options=options,
+        output_prefix=join(options.output_directory, options.input_stem))
+
+    # extract traits from inverted
+    extract_traits_internal(
+        grayscale_image=inverted_grayscale.copy(),
+        color_image=inverted_color.copy(),
+        options=options,
+        output_prefix=join(options.output_directory, f"{options.input_stem}.inverted"))
+

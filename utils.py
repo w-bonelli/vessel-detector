@@ -11,13 +11,13 @@ from results import VesselDetectorResult
 
 def write_results(results: List[VesselDetectorResult], options: VesselDetectorOptions, stem: str):
     # YAML
-    yaml_path = join(options.output_directory, f"{stem}.results.yml")
+    yaml_path = f"{stem}.results.yml"
     print(f"Writing YAML file: {yaml_path}")
     with open(yaml_path, 'w') as file:
         yaml.dump(results, file, default_flow_style=False)
 
     # CSV
-    csv_path = join(options.output_directory, f"{stem}.results.csv")
+    csv_path = f"{stem}.results.csv"
     print(f"Writing CSV file: {csv_path}")
     with open(csv_path, 'w') as file:
         writer = csv.writer(file, delimiter=',', quotechar='|', quoting=csv.QUOTE_MINIMAL)
@@ -26,7 +26,7 @@ def write_results(results: List[VesselDetectorResult], options: VesselDetectorOp
             writer.writerow([result.id, result.area, result.solidity, result.max_height, result.max_width])
 
     # Excel
-    excel_path = join(options.output_directory, f"{stem}.results.xlsx")
+    excel_path = f"{stem}.results.xlsx"
     print(f"Writing Excel file: {excel_path}")
     wb = load_workbook(excel_path) if isfile(excel_path) else Workbook()
     sheet = wb.active
