@@ -80,12 +80,6 @@ def edges_and_contours(
     contours_thresh_adaptive = detect_contours(thresh_adaptive, color, options, f"{stem}.thresh.adaptive")
     contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu")
 
-    # find contours for all 3 threshold types based on prior edge detection
-    # (some may work better than others depending on the input image)
-    contours_edges_thresh_simple = detect_contours(edges_thresh_simple, color, options, f"{stem}.thresh.simple.edges")
-    contours_edges_thresh_adaptive = detect_contours(edges_thresh_adaptive, color, options, f"{stem}.thresh.adaptive.edges")
-    contours_edges_thresh_otsu = detect_contours(edges_thresh_otsu, color, options, f"{stem}.thresh.otsu.edges")
-
 
 def explore1(options: VesselDetectorOptions):
     output_prefix = join(options.output_directory, options.input_stem)
@@ -100,8 +94,12 @@ def explore1(options: VesselDetectorOptions):
         grayscale = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
         color = cv2.imread(options.input_file)
 
-    # invert grayscale image
-    inv_grayscale = invert(grayscale, output_prefix)
+    cv2.imwrite(f"{output_prefix}.orig.gray.png", grayscale)
+    cv2.imwrite(f"{output_prefix}.orig.color.png", color)
 
-    edges_and_contours(grayscale, color, options, output_prefix)
-    edges_and_contours(inv_grayscale, color, options, f"{output_prefix}.inv", invert=True)
+    edges_and_contours(grayscale, color, options, f"{output_prefix}", invert=False)
+    edges_and_contours(grayscale, color, options, f"{output_prefix}.inv", invert=True)
+
+    # invert grayscale image
+    # inv_grayscale = invert(grayscale, output_prefix)
+    # edges_and_contours(inv_grayscale, color, options, f"{output_prefix}.inv", invert=True)

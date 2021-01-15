@@ -12,6 +12,12 @@ Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/sin
 
 ## Usage
 
+To explore the `vessel-detector` image, open a shell inside it:
+
+```shell
+docker run -it -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector bash
+```
+
 A good way to get started is to run the tests:
 
 ```shell
