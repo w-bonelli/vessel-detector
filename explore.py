@@ -70,9 +70,9 @@ def edges_and_contours(
 
     # find edges for all 3 threshold types
     # (some may work better than others depending on the input image)
-    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple", invert)
-    edges_thresh_adaptive = detect_edges(thresh_adaptive, f"{stem}.thresh.adaptive", invert)
-    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu", invert)
+    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple")
+    edges_thresh_adaptive = detect_edges(thresh_adaptive, f"{stem}.thresh.adaptive")
+    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu")
 
     # find contours for all 3 threshold types
     # (some may work better than others depending on the input image)
