@@ -99,12 +99,22 @@ def kmeans(preprocessed: np.ndarray, color: np.ndarray, options: VesselDetectorO
     res = center[labels.flatten()]
     res2 = res.reshape((preprocessed.shape))
 
+    kmeansImage = np.zeros(color.shape[:2], dtype=np.uint8)
+    clustering = np.reshape(np.array(labels, dtype=np.uint8),
+                            (color.shape[0], color.shape[1]))
+    for i, label in enumerate(labels):
+        kmeansImage[clustering == label] = int((255) / (10 - 1)) * i
+
+    concatImage = np.concatenate((color,
+                                  193 * np.ones((color.shape[0], int(0.0625 * color.shape[1]), 3), dtype=np.uint8),
+                                  cv2.cvtColor(kmeansImage, cv2.COLOR_GRAY2BGR)), axis=1)
+
     # label_hue = np.uint8(179 * labels / np.max(labels))
     # blank_ch = 255 * np.ones_like(label_hue)
     # labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
     # labeled_img[label_hue == 0] = 0
 
-    cv2.imwrite(f"{stem}.kmeans.overlay.png", res2)
+    cv2.imwrite(f"{stem}.kmeans.overlay.png", concatImage)
 
     return res2
 
@@ -146,9 +156,10 @@ def edges_and_contours(
     thresh_adaptive = apply_adaptive_threshold(grayscale, stem, invert)
     thresh_otsu = apply_otsu_threshold(grayscale, stem, invert)
 
-    # kmeans(thresh_simple.copy(), color.copy(), options, f"{stem}.thresh.simple")
-    # kmeans(thresh_adaptive.copy(), color.copy(), options, f"{stem}.thresh.adaptive")
-    # kmeans(thresh_otsu.copy(), color.copy(), options, f"{stem}.thresh.otsu")
+    # blur image
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.simple")
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.adaptive")
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.otsu")
 
     # find edges for all 3 threshold types
     edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple")
