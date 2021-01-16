@@ -2,6 +2,7 @@ import math
 from os.path import join
 
 import cv2
+import skimage
 from czifile import czifile
 import numpy as np
 from sklearn.cluster import KMeans
@@ -182,6 +183,38 @@ def edges_and_contours(
     contours_thresh_otsu = detect_contours(sobel_thresh_otsu, color, options, f"{stem}.thresh.otsu.sobel")
 
 
+def edges_and_contours_czi(
+        grayscale: np.ndarray,
+        color: np.ndarray,
+        options: VesselDetectorOptions,
+        stem: str,
+        invert: bool):
+    # apply thresholds
+    thresh_simple = apply_simple_threshold(grayscale, stem, invert)
+    thresh_otsu = apply_otsu_threshold(grayscale, stem, invert)
+
+    # blur image
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.simple")
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.adaptive")
+    # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.otsu")
+
+    # find edges for all 3 threshold types
+    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple")
+    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu")
+
+    # Sobel edge detection
+    sobel_thresh_simple = sobel_edges(thresh_simple, f"{stem}.thresh.simple")
+    sobel_thresh_otsu = sobel_edges(thresh_otsu, f"{stem}.thresh.otsu")
+
+    # find contours for all 3 threshold types
+    contours_thresh_simple = detect_contours(thresh_simple, color, options, f"{stem}.thresh.simple")
+    contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu")
+
+    # find contours for all 3 threshold types
+    contours_thresh_simple = detect_contours(sobel_thresh_simple, color, options, f"{stem}.thresh.simple.sobel")
+    contours_thresh_otsu = detect_contours(sobel_thresh_otsu, color, options, f"{stem}.thresh.otsu.sobel")
+
+
 def explore1(options: VesselDetectorOptions):
     output_prefix = join(options.output_directory, options.input_stem)
     print(f"Extracting traits from {output_prefix}'")
@@ -190,17 +223,24 @@ def explore1(options: VesselDetectorOptions):
     if options.input_file.endswith('.czi'):
         grayscale = czifile.imread(options.input_file)
         grayscale.shape = (grayscale.shape[2], grayscale.shape[3], grayscale.shape[4])  # drop first 2 columns
-        color = None
+        cv2.imwrite(f"{output_prefix}.orig.png", skimage.img_as_uint(grayscale))
+        color = cv2.cvtColor(grayscale.copy(), cv2.COLOR_GRAY2RGB)
+        czi = True
     else:
         grayscale = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)
         color = cv2.imread(options.input_file)
+        czi = False
 
     cv2.imwrite(f"{output_prefix}.orig.gray.png", grayscale)
     cv2.imwrite(f"{output_prefix}.orig.color.png", color)
 
     # edges and contours
-    edges_and_contours(grayscale, color, options, f"{output_prefix}", invert=False)
-    edges_and_contours(grayscale, color, options, f"{output_prefix}.inv", invert=True)
+    if czi:
+        edges_and_contours_czi(grayscale, color, options, f"{output_prefix}", invert=False)
+        edges_and_contours_czi(grayscale, color, options, f"{output_prefix}.inv", invert=True)
+    else:
+        edges_and_contours(grayscale, color, options, f"{output_prefix}", invert=False)
+        edges_and_contours(grayscale, color, options, f"{output_prefix}.inv", invert=True)
 
     # circle detection
     # circles_edges_thresh_simple = detect_circles(grayscale, color, options, output_prefix)

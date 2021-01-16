@@ -214,6 +214,7 @@ def extract_traits(options: VesselDetectorOptions):
     if options.input_file.endswith('.czi'):
         image_grayscale = czifile.imread(options.input_file)
         image_grayscale.shape = (image_grayscale.shape[2], image_grayscale.shape[3], image_grayscale.shape[4])  # drop first 2 columns
+        image_grayscale = cv2.filter2D(image_grayscale, -1, np.ones((5, 5), np.float32) / 25)
         image_color = None
     else:
         image_grayscale = cv2.imread(options.input_file, cv2.IMREAD_GRAYSCALE)

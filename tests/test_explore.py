@@ -12,11 +12,12 @@ test_dir = Path(__file__).parent
 output_dir = join(test_dir, 'output')
 data_dir = join(test_dir, 'data')
 Path(output_dir).mkdir(parents=True, exist_ok=True)
-test_images = glob(join(data_dir, '*.jpg'))
+jpg_images = glob(join(data_dir, '*.jpg'))
+czi_images = glob(join(data_dir, '*.czi'))
 
 
-@pytest.mark.parametrize("image_file", test_images)
-def test_explore1(image_file):
+@pytest.mark.parametrize("image_file", jpg_images)
+def test_explore1_jpg(image_file):
     options = VesselDetectorOptions(
         input_file=join(data_dir, image_file),
         output_directory=output_dir)
@@ -24,7 +25,16 @@ def test_explore1(image_file):
     explore1(options)
 
 
-@pytest.mark.parametrize("image_file", test_images)
+@pytest.mark.parametrize("image_file", czi_images)
+def test_explore1_czi(image_file):
+    options = VesselDetectorOptions(
+        input_file=join(data_dir, image_file),
+        output_directory=output_dir)
+
+    explore1(options)
+
+
+@pytest.mark.parametrize("image_file", jpg_images)
 @pytest.mark.skip(reason='bad')
 def test_detect_circles(image_file):
     options = VesselDetectorOptions(
@@ -37,7 +47,7 @@ def test_detect_circles(image_file):
     circles = detect_circles(grayscale, color, options, output_prefix)
 
 
-@pytest.mark.parametrize("image_file", test_images)
+@pytest.mark.parametrize("image_file", jpg_images)
 @pytest.mark.skip(reason='bad')
 def test_detect_circles_adaptive_threshold(image_file):
     options = VesselDetectorOptions(
