@@ -6,6 +6,7 @@ from pathlib import Path
 
 import click
 
+from explore import explore1
 from options import VesselDetectorOptions
 from segmentation import extract_traits
 
@@ -35,14 +36,26 @@ def detect(source, output_directory, min_radius, file_types):
             output_directory=output_directory,
             min_radius=min_radius)
         print(f"Searching for vessels with minimum radius {min_radius}px in: {source}")
-        extract_traits(source, options.min_radius)
+        extract_traits(options)
+        print(f"Searching for vessels with minimum radius {min_radius}px (alternative method) in: {source}")
+        explore1(options)
     elif Path(source).is_dir():  # if input is a directory, use as many cores as the host can spare
         sources = sum((sorted(glob(join(source, f"*.{file_type}"))) for file_type in parsed_file_types), [])
         sources_str = '\n'.join(sources)
-        cores = cpu_count()
-        print(f"Using {cores} cores to search {len(sources)} files for vessels:\n{sources_str}")
-        with closing(Pool(processes=cores)) as pool:
-            pool.starmap(extract_traits, [(source, min_radius) for source in sources])
+        processes = cpu_count()
+        options = [VesselDetectorOptions(
+            input_file=source,
+            output_directory=output_directory,
+            min_radius=min_radius) for source in sources]
+
+        print(f"Using {processes} processes to search {len(sources)} files for vessels (Suxing's method):\n{sources_str}")
+        with closing(Pool(processes=processes)) as pool:
+            pool.map(extract_traits, options)
+            pool.terminate()
+
+        print(f"Using {processes} processes to search {len(sources)} files for vessels (alternative method):\n{sources_str}")
+        with closing(Pool(processes=processes)) as pool:
+            pool.map(explore1, options)
             pool.terminate()
 
 

@@ -42,9 +42,11 @@ from skimage.morphology import watershed, medial_axis
 from sklearn.cluster import KMeans
 from sklearn.cluster import MiniBatchKMeans
 
+from options import VesselDetectorOptions
 from results import VesselDetectorResult
 from tools import utils
 from tools.curvature import ComputeCurvature
+from utils import write_results
 
 warnings.filterwarnings("ignore")
 
@@ -224,53 +226,12 @@ def watershed_seg(orig, thresh, min_distance_value):
     return labels
 
 
-def comp_external_contour(orig, thresh):
-    # find contours and get the external one
-    contours, hier = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-    img_height, img_width, img_channels = orig.shape
-
-    index = 1
-
-    for c in contours:
-        # get the bounding rect
-        x, y, w, h = cv2.boundingRect(c)
-        if w > img_width * 0.1 and h > img_height * 0.1:
-            index += 1
-            hull = cv2.convexHull(c)
-            area = cv2.contourArea(c)
-            print("Area: {0:.2f} ".format(area))
-
-            hull = cv2.convexHull(c)
-            hull_area = cv2.contourArea(hull)
-            solidity = float(area) / hull_area
-            print("Solidity: {0:.2f} ".format(solidity))
-
-            extLeft = tuple(c[c[:, :, 0].argmin()][0])
-            extRight = tuple(c[c[:, :, 0].argmax()][0])
-            extTop = tuple(c[c[:, :, 1].argmin()][0])
-            extBot = tuple(c[c[:, :, 1].argmax()][0])
-
-            max_width = dist.euclidean(extLeft, extRight)
-            max_height = dist.euclidean(extTop, extBot)
-
-            if max_width > max_height:
-                trait_img = cv2.line(orig, extLeft, extRight, (0, 255, 0), 2)
-            else:
-                trait_img = cv2.line(orig, extTop, extBot, (0, 255, 0), 2)
-
-            print("Width, Height: {0:.2f}, {1:.2f} ".format(w, h))
-
-            return trait_img, area, solidity, w, h
-        return None, None, None, w, h
-    return None, None, None, None, None
-
-
-def compute_curv(orig, labels, grayscale=False, min_radius=15):
+def find_vessels(orig, labels, grayscale=False, min_radius=15):
     gray = orig if grayscale else cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
     label_trait = None
     curv_sum = 0.0
     count = 0
+    results = []
     # curvature computation
     # loop over the unique labels returned by the Watershed algorithm
     for index, label in enumerate(np.unique(labels), start=1):
@@ -312,10 +273,19 @@ def compute_curv(orig, labels, grayscale=False, min_radius=15):
             cnt = cv2.approxPolyDP(c, 0.035 * cv2.arcLength(c, True), True)
             bounding_rect = cv2.boundingRect(cnt)
             (x, y, w, h) = bounding_rect
+            rect_area = w * h
             cv2.drawContours(orig, [c], 0, (0, 255, 0), 3)
             label_trait = cv2.circle(orig, (int(x), int(y)), 3, (0, 255, 0), 2)
             label_trait = cv2.putText(orig, "#{}".format(label), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1,
                                       (0, 0, 255), 2)
+
+            result = VesselDetectorResult(
+                id=str(count),
+                area=area,
+                solidity=min(round(area / rect_area, 4), 1),
+                max_height=h,
+                max_width=w)
+            results.append(result)
         else:
             # optional to "delete" the small contours
             label_trait = cv2.drawContours(orig, [c], -1, (0, 0, 255), 2)
@@ -326,7 +296,7 @@ def compute_curv(orig, labels, grayscale=False, min_radius=15):
     else:
         print("Can't find average curvature, no contours found")
 
-    return curv_sum / count if count != 0 else 0, label_trait
+    return curv_sum / count if count != 0 else 0, label_trait, results
 
 
 def RGB2HEX(color):
@@ -765,82 +735,77 @@ def color_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
-def extract_traits(image_path, min_radius):
-    image_abs_path = os.path.abspath(image_path)
-    image_file_name, output_ext = os.path.splitext(image_abs_path)
-    image_file = os.path.splitext(os.path.basename(image_file_name))[0]
-    output_dir = join(dirname(dirname(image_path)), 'output')
+def extract_traits2(options: VesselDetectorOptions):
+    pass
 
-    if image_path.endswith('.czi'):
-        image = czifile.imread(image_path)
+
+def extract_traits(options: VesselDetectorOptions):
+    output_prefix = join(options.output_directory, options.input_stem)
+    output_ext = 'png'
+
+    # read the image
+    if options.input_file.endswith('.czi'):
+        image = czifile.imread(options.input_file)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
         image_copy = image.copy()
-        cv2.imwrite(join(output_dir, f"{image_file}.orig.jpg"), image_copy)
+        output_ext = 'jpg'
+        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
     else:
-        image = cv2.imread(image_path)
+        image = cv2.imread(options.input_file)
         image_copy = image.copy()
-        cv2.imwrite(join(output_dir, f"{image_file}.orig.png"), image_copy)
-
-    args_colorspace = 'lab'
-    args_channels = 'all'
-    args_num_clusters = 2
+        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
 
     # make backup image
     image_copy = image.copy()
-    cv2.imwrite(join(output_dir, f"{image_file}.orig.png"), image_copy)
+    cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
 
-    # add color channels if it's a grayscale image
-    if image.shape[2] == 1:
-        # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
-        # grayscale clustering based plant object segmentation
-        thresh = grayscale_cluster_seg(image_copy, args_colorspace, args_channels, args_num_clusters)
-    else:
-        # color clustering based plant object segmentation
-        thresh = color_cluster_seg(image_copy, args_colorspace, args_channels, args_num_clusters)
+    # threshold and clustering
+    colorspace = 'lab'
+    channels = 'all'
+    clusters = 2
+    thresh = grayscale_cluster_seg(image_copy, colorspace, channels, clusters) if image.shape[2] == 1 \
+        else color_cluster_seg(image_copy, colorspace, channels, clusters)
+    cv2.imwrite(f"{output_prefix}.seg.{output_ext}", thresh)
 
-    # save segmentation result
-    seg = join(output_dir, f"{image_file}.seg.png")
-    cv2.imwrite(seg, thresh)
+    # invert segmented image
+    print(f"Inverting full image")
+    inv_orig = cv2.bitwise_not(image.copy())
+    cv2.imwrite(f"{output_prefix}.orig.inv.{output_ext}", inv_orig)
 
-    num_clusters = 5
-    if image.shape[2] == 1:
-        rgb_colors = grayscale_region(image_copy.astype(dtype=np.uint8), thresh, join(output_dir, image_file), num_clusters)
-    else:
-        rgb_colors = color_region(image_copy, thresh, join(output_dir, image_file), num_clusters)
+    print(f"Inverting segmented image")
+    inv_thresh = cv2.bitwise_not(thresh.copy())
+    cv2.imwrite(f"{output_prefix}.seg.inv.{output_ext}", inv_thresh)
 
-    selected_color = rgb2lab(np.uint8(np.asarray([[rgb_colors[0]]])))
-    for index, value in enumerate(rgb_colors):
-        # print(index, value)
-        curr_color = rgb2lab(np.uint8(np.asarray([[value]])))
-        diff = deltaE_cie76(selected_color, curr_color)
-        print(index, value, diff)
+    ## standard vessel-vinding
 
+    # watershed segmentation
     min_distance_value = 5
-    # watershed based leaf area segmentaiton
     labels = watershed_seg(image_copy, thresh, min_distance_value)
 
-    # save watershed result label image
-    # Map component labels to hue val
-    label_hue = np.uint8(128 * labels / np.max(labels))
-    blank_ch = 255 * np.ones_like(label_hue)
-    labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
-
-    # cvt to BGR for display
-    labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
-
-    # find curvature
-    if min_radius is not None:
-        (avg_curv, label_trait) = compute_curv(image_copy, labels, image.shape[2] == 1, min_radius)
+    # find vessel contours
+    if options.min_radius is not None:
+        (avg_curv, label_trait, results) = find_vessels(image_copy, labels, image.shape[2] == 1, options.min_radius)
+        write_results(results, options, f"{output_prefix}")
     else:
-        (avg_curv, label_trait) = compute_curv(image_copy, labels, image.shape[2] == 1)
+        (avg_curv, label_trait, results) = find_vessels(image_copy, labels, image.shape[2] == 1)
+        write_results(results, options, f"{output_prefix}")
     if label_trait is not None:
-        curv = join(output_dir, f"{image_file}.curv.png")
-        cv2.imwrite(curv, label_trait)
+        cv2.imwrite(f"{output_prefix}.curv.{output_ext}", label_trait)
 
-    # find external contour
-    (trait_img, area, solidity, max_width, max_height) = comp_external_contour(image.copy(), thresh)
-    excont = join(output_dir, f"{image_file}.cont.png")
-    if trait_img is not None:
-        cv2.imwrite(excont, trait_img)
+    ## inverted vessel-vinding
 
-    return image_file_name, area, solidity, max_width, max_height, avg_curv
+    # watershed segmentation
+    min_distance_value = 5
+    inv_labels = watershed_seg(inv_orig, inv_thresh, min_distance_value)
+
+    # find vessel contours
+    if options.min_radius is not None:
+        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1, options.min_radius)
+        write_results(results, options, f"{output_prefix}.inv")
+    else:
+        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1)
+        write_results(results, options, f"{output_prefix}.inv")
+    if label_trait is not None:
+        cv2.imwrite(f"{output_prefix}.inv.curv.{output_ext}", label_trait)
+
+    return options.input_stem, None, None, None, None, avg_curv
