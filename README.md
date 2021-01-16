@@ -1,27 +1,45 @@
-# Vessel Analysis
+# Vessel Detector
 
-Author: Suxing Liu
+![CI](https://github.com/w-bonelli/vessel-detector/workflows/CI/badge.svg) [![Coverage Status](https://coveralls.io/repos/github/w-bonelli/vessel-detector/badge.svg?branch=master)](https://coveralls.io/github/w-bonelli/vessel-detector?branch=master)
 
-Robust and parameter-free plant image segmentation and trait extraction.
+Detects injection-filled and empty vessels in stem tissues.
 
-1. Process with plant image top view, including whole tray plant image, this tool will segment it into individual images.
-2. Robust segmentation based on parameter-free color clustering method.
-3. Extract individual plant gemetrical traits, and write output into excel file.
+Author: Suxing Liu (adapted by Wes Bonelli)
 
-## Requirements
+## Requirements & Installation
 
-Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/) is required to run this project in a Unix environment.
+Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/) is required to run this project in a Unix environment. First, clone the project with `git clone https://github.com/w-bonelli/vessel-analysis.git`.
 
 ## Usage
 
-### Docker
+To explore the `vessel-detector` image, open a shell inside it:
 
-```bash
-docker run computationalplantscience/arabidopsis-rosette-analysis python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
+```shell
+docker run -it -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector bash
 ```
 
-### Singularity
+A good way to get started is to run the tests:
+
+```shell
+docker run -it -v "$(pwd)":/opt/dev -w /opt/dev wbonelli/vessel-detector python3 -m pytest -s
+```
+
+#### Docker
+
+To run with Docker, use a command like:
+
+```shell
+docker run -t -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vd.py detect <input file> -o <output directory> -mr <minimum vessel radius> -ft <filetypes, comma-separated>
+```
+
+#### Singularity
+
+To use Singularity:
 
 ```bash
-singularity exec docker://computationalplantscience/arabidopsis-rosette-analysis python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
+singularity exec docker://wbonelli/vessel-detector python3 vd.py detect <input file> -o <output directory> -mr <minimum vessel radius> -ft <filetypes, comma-separated>
 ```
+
+### Supported filetypes
+
+By default, JPG, PNG, and CZI files are supported. To limit the analysis to certain filetypes, use the `-ft` flag (a comma-separated for multiple), for instance: `-ft png,czi`.

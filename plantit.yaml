@@ -1,16 +1,29 @@
 name: Vessel Detector
-author: Suxing Liu, Wes Bonelli
+author: Wes Bonelli
 public: True
-clone: True
-from: 
-to: output
-image: docker://computationalplantscience/vessel-detector
-commands: python3 arabidopsis-rosette-analysis/trait_extract_parallel.py -i "$INPUT" -ft "$FILETYPE"
-logo: vessels_logo.jpg
+clone: False
+image: docker://wbonelli/vessel-detector
+commands: python3 /opt/vessel-detector/vd.py detect "$INPUT" -mr $MIN_RADIUS
 params:
- - filetype
+ - min_radius=15
+input:
+  kind: files
+  path:
+  filetypes:
+    - jpg
+    - png
+    - czi
+output:
+  path:
+  include:
+    patterns:
+      - xlsx
+      - png
+      - jpg
+      - png
+logo: vessels.jpg
 resources:
-  time: "02:00:00"
-  mem: "31GB"
+  time: "01:00:00"
+  mem: "10GB"
   tasks: 1
-  cores: 12
+  cores: 1
