@@ -1,5 +1,5 @@
 import csv
-from os.path import join, isfile
+from os.path import isfile
 from typing import List
 
 import yaml

@@ -3,10 +3,9 @@ author: Wes Bonelli
 public: True
 clone: False
 image: docker://wbonelli/vessel-detector
-commands: python3 /opt/vessel-detector/vessels.py "$INPUT" -mr $MIN_RADIUS -ms $MIN_SIZE
+commands: python3 /opt/vessel-detector/vd.py detect "$INPUT" -mr $MIN_RADIUS
 params:
  - min_radius=15
- - min_size=500
 input:
   kind: files
   path:

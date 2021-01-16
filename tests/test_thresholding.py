@@ -7,15 +7,15 @@ import numpy as np
 import pytest
 
 from options import VesselDetectorOptions
-from thresholding import otsu_threshold, adaptive_threshold_gaussian, adaptive_threshold_mean, \
-    simple_threshold
+
+from thresholding import otsu_threshold, adaptive_threshold_gaussian, simple_threshold
 
 test_dir = Path(__file__).parent
 output_dir = join(test_dir, 'output')
 Path(output_dir).mkdir(parents=True, exist_ok=True)
 test_images = [
-    'ploc-10-1-1.jpg',
-    # 'ploc-10-1-1.czi'
+    'ploc-10-2-3.jpg',
+    'ploc-45-2-1.jpg'
 ]
 
 

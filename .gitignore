@@ -18,5 +18,11 @@ tests/__pycache__/
 tests/scratch
 data
 output*
+<<<<<<< HEAD
 *.DS_Store
+=======
+tests/scratch
+tests/output
+tests/__pycache__
+>>>>>>> old
 .coverage
