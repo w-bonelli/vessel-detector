@@ -11,7 +11,6 @@ utils.pyc
 .env
 .bash_history
 .python_history
-*test/
 .cache/*
 tools/__pycache__/
 data
