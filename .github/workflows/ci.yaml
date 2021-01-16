@@ -51,8 +51,4 @@ jobs:
           SLACK_ICON: https://raw.githubusercontent.com/w-bonelli/vessel-detector/master/vessels.jpg
           SLACK_MESSAGE: 'Build succeeded'
           SLACK_TITLE: Vessel Detector CI
-<<<<<<< HEAD
           SLACK_USERNAME: vessel-detector
-=======
-          SLACK_USERNAME: vessel-detector
->>>>>>> old

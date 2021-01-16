@@ -19,13 +19,6 @@ RUN apt-get update && \
 
 ENV LC_ALL=C.UTF-8
 ENV LANG=C.UTF-8
-<<<<<<< HEAD
 
 RUN pip3 install --upgrade pip && \
     pip3 install -r /opt/vessel-detector/requirements.txt
-
-=======
-
-RUN pip3 install --upgrade pip && \
-    pip3 install -r /opt/vessel-detector/requirements.txt
->>>>>>> old
