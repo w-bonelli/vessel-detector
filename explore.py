@@ -1,9 +1,4 @@
-import math
-from os.path import join
-
 import cv2
-import skimage
-from czifile import czifile
 import numpy as np
 from sklearn.cluster import KMeans
 
@@ -13,10 +8,10 @@ from traits import find_contours
 from utils import write_results
 
 
-def detect_edges(image: np.ndarray, stem: str):
+def detect_edges(image: np.ndarray, stem: str, ext: str):
     print(f"Finding edges in {stem}")
     edges = cv2.Canny(image.copy(), 100, 200)
-    cv2.imwrite(f"{stem}.edges.png", edges)
+    cv2.imwrite(f"{stem}.edges.{ext}", edges)
     return edges
 
 
@@ -24,10 +19,11 @@ def detect_contours(
         binary: np.ndarray,
         color: np.ndarray,
         options: VesselDetectorOptions,
-        stem: str) -> np.ndarray:
+        stem: str,
+        ext: str) -> np.ndarray:
     print(f"Finding contours in {stem}")
     contours, results = find_contours(binary.copy(), color.copy(), options)
-    cv2.imwrite(f"{stem}.contours.png", contours)
+    cv2.imwrite(f"{stem}.contours.{ext}", contours)
     write_results(results, options, f"{stem}.contours")
     return contours
 
@@ -77,13 +73,13 @@ def detect_circles(grayscale: np.ndarray, color: np.ndarray, options: VesselDete
     return image_copy
 
 
-def sobel_edges(image: np.ndarray, stem: str) -> np.ndarray:
+def sobel_edges(image: np.ndarray, stem: str, ext: str) -> np.ndarray:
     print(f"Finding Sobel edges in {stem}")
     sobel = image.copy()
     sobel_x = cv2.Sobel(sobel, cv2.CV_64F, 1, 0, ksize=3)
     sobel_y = cv2.Sobel(sobel, cv2.CV_64F, 0, 1, ksize=3)
     sobel_xy = cv2.addWeighted(cv2.convertScaleAbs(sobel_x), 0.5, cv2.convertScaleAbs(sobel_y), 0.5, 0)
-    cv2.imwrite(f"{stem}.sobel.png", sobel_xy)
+    cv2.imwrite(f"{stem}.sobel.{ext}", sobel_xy)
     return sobel_xy
 
 
@@ -163,24 +159,24 @@ def edges_and_contours(
     # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.otsu")
 
     # find edges for all 3 threshold types
-    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple")
-    edges_thresh_adaptive = detect_edges(thresh_adaptive, f"{stem}.thresh.adaptive")
-    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu")
+    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple", 'png')
+    edges_thresh_adaptive = detect_edges(thresh_adaptive, f"{stem}.thresh.adaptive", 'png')
+    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu", 'png')
 
     # Sobel edge detection
-    sobel_thresh_simple = sobel_edges(thresh_simple, f"{stem}.thresh.simple")
-    sobel_thresh_adaptive = sobel_edges(thresh_adaptive, f"{stem}.thresh.adaptive")
-    sobel_thresh_otsu = sobel_edges(thresh_otsu, f"{stem}.thresh.otsu")
+    sobel_thresh_simple = sobel_edges(thresh_simple, f"{stem}.thresh.simple", 'png')
+    sobel_thresh_adaptive = sobel_edges(thresh_adaptive, f"{stem}.thresh.adaptive", 'png')
+    sobel_thresh_otsu = sobel_edges(thresh_otsu, f"{stem}.thresh.otsu", 'png')
 
     # find contours for all 3 threshold types
-    contours_thresh_simple = detect_contours(thresh_simple, color, options, f"{stem}.thresh.simple")
-    contours_thresh_adaptive = detect_contours(thresh_adaptive, color, options, f"{stem}.thresh.adaptive")
-    contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu")
+    contours_thresh_simple = detect_contours(thresh_simple, color, options, f"{stem}.thresh.simple", 'png')
+    contours_thresh_adaptive = detect_contours(thresh_adaptive, color, options, f"{stem}.thresh.adaptive", 'png')
+    contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu", 'png')
 
     # find contours for all 3 threshold types
-    contours_thresh_simple = detect_contours(sobel_thresh_simple, color, options, f"{stem}.thresh.simple.sobel")
-    contours_thresh_adaptive = detect_contours(sobel_thresh_adaptive, color, options, f"{stem}.thresh.adaptive.sobel")
-    contours_thresh_otsu = detect_contours(sobel_thresh_otsu, color, options, f"{stem}.thresh.otsu.sobel")
+    contours_thresh_simple = detect_contours(sobel_thresh_simple, color, options, f"{stem}.thresh.simple.sobel", 'png')
+    contours_thresh_adaptive = detect_contours(sobel_thresh_adaptive, color, options, f"{stem}.thresh.adaptive.sobel", 'png')
+    contours_thresh_otsu = detect_contours(sobel_thresh_otsu, color, options, f"{stem}.thresh.otsu.sobel", 'png')
 
 
 def edges_and_contours_czi(
@@ -199,61 +195,16 @@ def edges_and_contours_czi(
     # kmeans(cv2.GaussianBlur(thresh_simple.copy(), (5, 5), cv2.BORDER_DEFAULT), color.copy(), options, f"{stem}.thresh.otsu")
 
     # find edges for all 3 threshold types
-    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple")
-    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu")
+    edges_thresh_simple = detect_edges(thresh_simple, f"{stem}.thresh.simple", 'jpg')
+    edges_thresh_otsu = detect_edges(thresh_otsu, f"{stem}.thresh.otsu", 'jpg')
 
     # Sobel edge detection
-    sobel_thresh_simple = sobel_edges(thresh_simple, f"{stem}.thresh.simple")
-    sobel_thresh_otsu = sobel_edges(thresh_otsu, f"{stem}.thresh.otsu")
+    sobel_thresh_simple = sobel_edges(thresh_simple, f"{stem}.thresh.simple", 'jpg')
+    sobel_thresh_otsu = sobel_edges(thresh_otsu, f"{stem}.thresh.otsu", 'jpg')
 
     # find contours for all 3 threshold types
-    contours_thresh_simple = detect_contours(thresh_simple, color, options, f"{stem}.thresh.simple")
-    contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu")
+    contours_thresh_simple = detect_contours(thresh_simple, color, options, f"{stem}.thresh.simple", 'jpg')
+    contours_thresh_otsu = detect_contours(thresh_otsu, color, options, f"{stem}.thresh.otsu", 'jpg')
 
     # find contours for all 3 threshold types
-    contours_thresh_simple = detect_contours(sobel_thresh_simple, color, options, f"{stem}.thresh.simple.sobel")
-    contours_thresh_otsu = detect_contours(sobel_thresh_otsu, color, options, f"{stem}.thresh.otsu.sobel")
-
-
-def explore1(options: VesselDetectorOptions):
-    output_prefix = join(options.output_directory, options.input_stem)
-    output_ext = 'png'
-    czi = False
-    print(f"Extracting traits from {output_prefix}'")
-
-    # read the image
-    if options.input_file.endswith('.czi'):
-        czi = True
-        image = czifile.imread(options.input_file)
-        image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        image_copy = image.copy()
-        grayscale = image_copy
-        color = cv2.cvtColor(grayscale, cv2.COLOR_GRAY2RGB)
-        output_ext = 'jpg'
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
-    else:
-        image = cv2.imread(options.input_file)
-        image_copy = image.copy()
-        grayscale = image_copy
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
-
-    cv2.imwrite(f"{output_prefix}.exp.orig.{output_ext}", grayscale)
-    cv2.imwrite(f"{output_prefix}.exp.orig.color.{output_ext}", color)
-
-    # edges and contours
-    if czi:
-        grayscale = cv2.imread(cv2.imwrite())
-        edges_and_contours_czi(grayscale, color, options, f"{output_prefix}.exp", invert=False)
-        edges_and_contours_czi(grayscale, color, options, f"{output_prefix}.exp.inv", invert=True)
-    else:
-        edges_and_contours(grayscale, color, options, f"{output_prefix}.exp", invert=False)
-        edges_and_contours(grayscale, color, options, f"{output_prefix}.exp.inv", invert=True)
-
-    # circle detection
-    # circles_edges_thresh_simple = detect_circles(grayscale, color, options, output_prefix)
-    # circles_edges_thresh_adaptive = detect_circles(grayscale, color, options, output_prefix)
-    # circles_edges_thresh_otsu = detect_circles(grayscale, color, options, output_prefix)
-
-    # invert grayscale image
-    # inv_grayscale = invert(grayscale, output_prefix)
-    # edges_and_contours(inv_grayscale, color, options, f"{output_prefix}.inv", invert=True)
+    contours_thresh_simple = detect_contours(sobel_thresh_simple, color, options, f"{stem}.thresh.simple.sobel", 'jpg')

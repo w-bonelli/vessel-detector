@@ -1,63 +1,28 @@
-"""
-Name: trait_extract_parallel.py
-
-Version: 1.0
-
-Summary: Extract plant traits (leaf area, width, height, solidity, curvature) by parallel processing
-
-Author: Suxing Liu
-
-Author-email: suxingliu@gmail.com
-
-Created: 2018-09-29
-
-USAGE:
-
-time python3 trait_extract_parallel.py -i /input/directory -o /output/directory -ft jpg
-"""
-
-import argparse
-import glob
 import math
-import os
 import warnings
 from collections import Counter
-from os.path import join, dirname
-from pathlib import Path
 
 import cv2
-import czifile
 import imutils
 import matplotlib.pyplot as plt
 import numpy as np
-from openpyxl import Workbook
-from openpyxl import load_workbook
 from scipy import ndimage
 from scipy.interpolate import interp1d
-from scipy.spatial import distance as dist
-from skimage import img_as_float, img_as_ubyte, img_as_bool
-from skimage.color import rgb2lab, deltaE_cie76
 from skimage.feature import peak_local_max
-from skimage.morphology import watershed, medial_axis
+from skimage.morphology import watershed
 from sklearn.cluster import KMeans
 from sklearn.cluster import MiniBatchKMeans
 
-from options import VesselDetectorOptions
 from results import VesselDetectorResult
 from tools import utils
 from tools.curvature import ComputeCurvature
-from utils import write_results
 
 warnings.filterwarnings("ignore")
-
-import multiprocessing
-from multiprocessing import Pool
-from contextlib import closing
 
 MBFACTOR = float(1 << 20)
 
 
-def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
+def clustering_grayscale(image, args_colorspace, args_channels, args_num_clusters):
     #clahe = cv2.createCLAHE(clipLimit=3., tileGridSize=(8, 8))
     #image = clahe.apply(image)  # apply CLAHE to the L-channel
     #image = cv2.equalizeHist(image)
@@ -119,7 +84,7 @@ def grayscale_cluster_seg(image, args_colorspace, args_channels, args_num_cluste
     return img_thresh
 
 
-def color_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
+def clustering_color(image, args_colorspace, args_channels, args_num_clusters):
     # Change image color space, if necessary.
     colorSpace = args_colorspace.lower()
 
@@ -196,18 +161,7 @@ def color_cluster_seg(image, args_colorspace, args_channels, args_num_clusters):
     return img_thresh
 
 
-def medial_axis_image(thresh):
-    # convert an image from OpenCV to skimage
-    thresh_sk = img_as_float(thresh)
-
-    image_bw = img_as_bool((thresh_sk))
-
-    image_medial_axis = medial_axis(image_bw)
-
-    return image_medial_axis
-
-
-def watershed_seg(orig, thresh, min_distance_value):
+def apply_watershed(orig, thresh, min_distance_value):
     # compute the exact Euclidean distance from every binary
     # pixel to the nearest zero pixel, then find peaks in this
     # distance map
@@ -303,7 +257,7 @@ def RGB2HEX(color):
     return "#{:02x}{:02x}{:02x}".format(int(color[0]), int(color[1]), int(color[2]))
 
 
-def color_quantization(image, mask, save_path, num_clusters):
+def quantize_color(image, mask, save_path, num_clusters):
     # grab image width and height
     (h, w) = image.shape[:2]
 
@@ -411,7 +365,7 @@ def get_cmap(n, name='hsv'):
     return plt.cm.get_cmap(name, n)
 
 
-def grayscale_region(image, mask, output_dir, num_clusters):
+def find_regions_grayscale(image, mask, output_dir, num_clusters):
     # read the image
     # grab image width and height
     (h, w) = image.shape[:2]
@@ -573,7 +527,7 @@ def grayscale_region(image, mask, output_dir, num_clusters):
     return rgb_colors
 
 
-def color_region(image, mask, output_dir, num_clusters):
+def find_regions_color(image, mask, output_dir, num_clusters):
     # read the image
     # grab image width and height
     (h, w) = image.shape[:2]
@@ -734,78 +688,3 @@ def color_region(image, mask, output_dir, num_clusters):
 
     return rgb_colors
 
-
-def extract_traits2(options: VesselDetectorOptions):
-    pass
-
-
-def extract_traits(options: VesselDetectorOptions):
-    output_prefix = join(options.output_directory, options.input_stem)
-    output_ext = 'png'
-
-    # read the image
-    if options.input_file.endswith('.czi'):
-        image = czifile.imread(options.input_file)
-        image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        image_copy = image.copy()
-        output_ext = 'jpg'
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
-    else:
-        image = cv2.imread(options.input_file)
-        image_copy = image.copy()
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
-
-    # make backup image
-    image_copy = image.copy()
-    cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
-
-    # threshold and clustering
-    colorspace = 'lab'
-    channels = 'all'
-    clusters = 2
-    thresh = grayscale_cluster_seg(image_copy, colorspace, channels, clusters) if image.shape[2] == 1 \
-        else color_cluster_seg(image_copy, colorspace, channels, clusters)
-    cv2.imwrite(f"{output_prefix}.seg.{output_ext}", thresh)
-
-    # invert segmented image
-    print(f"Inverting full image")
-    inv_orig = cv2.bitwise_not(image.copy())
-    cv2.imwrite(f"{output_prefix}.orig.inv.{output_ext}", inv_orig)
-
-    print(f"Inverting segmented image")
-    inv_thresh = cv2.bitwise_not(thresh.copy())
-    cv2.imwrite(f"{output_prefix}.seg.inv.{output_ext}", inv_thresh)
-
-    ## standard vessel-vinding
-
-    # watershed segmentation
-    min_distance_value = 5
-    labels = watershed_seg(image_copy, thresh, min_distance_value)
-
-    # find vessel contours
-    if options.min_radius is not None:
-        (avg_curv, label_trait, results) = find_vessels(image_copy, labels, image.shape[2] == 1, options.min_radius)
-        write_results(results, options, f"{output_prefix}")
-    else:
-        (avg_curv, label_trait, results) = find_vessels(image_copy, labels, image.shape[2] == 1)
-        write_results(results, options, f"{output_prefix}")
-    if label_trait is not None:
-        cv2.imwrite(f"{output_prefix}.curv.{output_ext}", label_trait)
-
-    ## inverted vessel-vinding
-
-    # watershed segmentation
-    min_distance_value = 5
-    inv_labels = watershed_seg(inv_orig, inv_thresh, min_distance_value)
-
-    # find vessel contours
-    if options.min_radius is not None:
-        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1, options.min_radius)
-        write_results(results, options, f"{output_prefix}.inv")
-    else:
-        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1)
-        write_results(results, options, f"{output_prefix}.inv")
-    if label_trait is not None:
-        cv2.imwrite(f"{output_prefix}.inv.curv.{output_ext}", label_trait)
-
-    return options.input_stem, None, None, None, None, avg_curv
