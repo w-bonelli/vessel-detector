@@ -16,3 +16,7 @@ utils.pyc
 tools/__pycache__/
 data
 output*
+tests/scratch
+tests/output
+tests/__pycache__
+.coverage

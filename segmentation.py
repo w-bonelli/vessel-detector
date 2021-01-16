@@ -18,6 +18,7 @@ time python3 trait_extract_parallel.py -i /input/directory -o /output/directory 
 
 import argparse
 import glob
+import math
 import os
 import warnings
 from collections import Counter
@@ -41,6 +42,7 @@ from skimage.morphology import watershed, medial_axis
 from sklearn.cluster import KMeans
 from sklearn.cluster import MiniBatchKMeans
 
+from results import VesselDetectorResult
 from tools import utils
 from tools.curvature import ComputeCurvature
 
@@ -231,63 +233,11 @@ def comp_external_contour(orig, thresh):
     index = 1
 
     for c in contours:
-
         # get the bounding rect
         x, y, w, h = cv2.boundingRect(c)
-
         if w > img_width * 0.1 and h > img_height * 0.1:
-
-            trait_img = cv2.drawContours(orig, contours, -1, (255, 255, 0), 1)
-
-            # draw a green rectangle to visualize the bounding rect
-            roi = orig[y:y + h, x:x + w]
-
-            print(f"ROI {index} detected ...")
-            # result_file = (save_path +  str(index) + file_extension)
-            # cv2.imwrite(result_file, roi)
-
-            trait_img = cv2.rectangle(orig, (x, y), (x + w, y + h), (255, 255, 0), 3)
-
             index += 1
-
-            '''
-            #get the min area rect
-            rect = cv2.minAreaRect(c)
-            box = cv2.boxPoints(rect)
-            # convert all coordinates floating point values to int
-            box = np.int0(box)
-            #draw a red 'nghien' rectangle
-            trait_img = cv2.drawContours(orig, [box], 0, (0, 0, 255))
-            '''
-            # get convex hull
             hull = cv2.convexHull(c)
-            # draw it in red color
-            trait_img = cv2.drawContours(orig, [hull], -1, (0, 0, 255), 3)
-
-            '''
-            # calculate epsilon base on contour's perimeter
-            # contour's perimeter is returned by cv2.arcLength
-            epsilon = 0.01 * cv2.arcLength(c, True)
-            # get approx polygons
-            approx = cv2.approxPolyDP(c, epsilon, True)
-            # draw approx polygons
-            trait_img = cv2.drawContours(orig, [approx], -1, (0, 255, 0), 1)
-         
-            # hull is convex shape as a polygon
-            hull = cv2.convexHull(c)
-            trait_img = cv2.drawContours(orig, [hull], -1, (0, 0, 255))
-            '''
-
-            '''
-            #get the min enclosing circle
-            (x, y), radius = cv2.minEnclosingCircle(c)
-            # convert all values to int
-            center = (int(x), int(y))
-            radius = int(radius)
-            # and draw the circle in blue
-            trait_img = cv2.circle(orig, center, radius, (255, 0, 0), 2)
-            '''
-
             area = cv2.contourArea(c)
             print("Area: {0:.2f} ".format(area))
 
@@ -300,11 +250,6 @@ def comp_external_contour(orig, thresh):
             extRight = tuple(c[c[:, :, 0].argmax()][0])
             extTop = tuple(c[c[:, :, 1].argmin()][0])
             extBot = tuple(c[c[:, :, 1].argmax()][0])
-
-            trait_img = cv2.circle(orig, extLeft, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extRight, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extTop, 3, (255, 0, 0), -1)
-            trait_img = cv2.circle(orig, extBot, 3, (255, 0, 0), -1)
 
             max_width = dist.euclidean(extLeft, extRight)
             max_height = dist.euclidean(extTop, extBot)
@@ -321,7 +266,7 @@ def comp_external_contour(orig, thresh):
     return None, None, None, None, None
 
 
-def compute_curv(orig, labels, grayscale=False, min_radius=10):
+def compute_curv(orig, labels, grayscale=False, min_radius=15):
     gray = orig if grayscale else cv2.cvtColor(orig, cv2.COLOR_BGR2GRAY)
     label_trait = None
     curv_sum = 0.0
@@ -345,18 +290,15 @@ def compute_curv(orig, labels, grayscale=False, min_radius=10):
         c = max(contours, key=cv2.contourArea)
 
         # draw a circle enclosing the object
+        min_area = math.pi * (min_radius ** 2)
+        # max_area = math.pi * ((min_radius * 10) ** 2)
+        area = cv2.contourArea(c)
         ((x, y), r) = cv2.minEnclosingCircle(c)
-        if r < min_radius: continue
-        label_trait = cv2.circle(orig, (int(x), int(y)), 3, (0, 255, 0), 2)
-        label_trait = cv2.putText(orig, "#{}".format(label), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.6,
-                                  (0, 0, 255), 2)
-        # cv2.putText(orig, "#{}".format(curvature), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+        if r < min_radius or area < min_area:
+            continue
 
         if len(c) >= 5:
-            label_trait = cv2.drawContours(orig, [c], -1, (255, 0, 0), 2)
-            ellipse = cv2.fitEllipse(c)
-            label_trait = cv2.ellipse(orig, ellipse, (0, 255, 0), 2)
-
             c_np = np.vstack(c).squeeze()
             count += 1
 
@@ -365,9 +307,15 @@ def compute_curv(orig, labels, grayscale=False, min_radius=10):
 
             comp_curv = ComputeCurvature(x, y)
             curvature = comp_curv.fit(x, y)
-
             curv_sum = curv_sum + curvature
 
+            cnt = cv2.approxPolyDP(c, 0.035 * cv2.arcLength(c, True), True)
+            bounding_rect = cv2.boundingRect(cnt)
+            (x, y, w, h) = bounding_rect
+            cv2.drawContours(orig, [c], 0, (0, 255, 0), 3)
+            label_trait = cv2.circle(orig, (int(x), int(y)), 3, (0, 255, 0), 2)
+            label_trait = cv2.putText(orig, "#{}".format(label), (int(x) - 10, int(y)), cv2.FONT_HERSHEY_SIMPLEX, 1,
+                                      (0, 0, 255), 2)
         else:
             # optional to "delete" the small contours
             label_trait = cv2.drawContours(orig, [c], -1, (0, 0, 255), 2)
@@ -818,156 +766,81 @@ def color_region(image, mask, output_dir, num_clusters):
 
 
 def extract_traits(image_path, min_radius):
-    print(image_path)
     image_abs_path = os.path.abspath(image_path)
-    image_file_name, img_file_ext = os.path.splitext(image_abs_path)
-    image_file_size = os.path.getsize(image_path) / MBFACTOR
+    image_file_name, output_ext = os.path.splitext(image_abs_path)
     image_file = os.path.splitext(os.path.basename(image_file_name))[0]
-
     output_dir = join(dirname(dirname(image_path)), 'output')
-    Path(output_dir).mkdir(exist_ok=True)
-
-    print(
-        f"Extracting traits for image '{image_file}' to '{output_dir}'... Segmenting image using automatic color clustering..." + f" File size is large: {str(image_file_size)} MB. This may take some time." if image_file_size > 5.0 else '')
 
     if image_path.endswith('.czi'):
         image = czifile.imread(image_path)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        img_file_ext = '.jpg'
+        image_copy = image.copy()
+        cv2.imwrite(join(output_dir, f"{image_file}.orig.jpg"), image_copy)
     else:
         image = cv2.imread(image_path)
+        image_copy = image.copy()
+        cv2.imwrite(join(output_dir, f"{image_file}.orig.png"), image_copy)
 
-    args_colorspace = args['color_space']
-    args_channels = args['channels']
-    args_num_clusters = args['num_clusters']
+    args_colorspace = 'lab'
+    args_channels = 'all'
+    args_num_clusters = 2
 
     # make backup image
-    converted = image.copy()
-    cv2.imwrite(join(output_dir, f"{image_file}_cvt{img_file_ext}"), converted)
+    image_copy = image.copy()
+    cv2.imwrite(join(output_dir, f"{image_file}.orig.png"), image_copy)
 
     # add color channels if it's a grayscale image
     if image.shape[2] == 1:
         # image = cv2.cvtColor(image.astype(dtype=np.uint8), cv2.COLOR_GRAY2BGR)
         # grayscale clustering based plant object segmentation
-        thresh = grayscale_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
+        thresh = grayscale_cluster_seg(image_copy, args_colorspace, args_channels, args_num_clusters)
     else:
         # color clustering based plant object segmentation
-        thresh = color_cluster_seg(converted, args_colorspace, args_channels, args_num_clusters)
+        thresh = color_cluster_seg(image_copy, args_colorspace, args_channels, args_num_clusters)
 
     # save segmentation result
-    seg = join(output_dir, f"{image_file}_seg{img_file_ext}")
+    seg = join(output_dir, f"{image_file}.seg.png")
     cv2.imwrite(seg, thresh)
 
     num_clusters = 5
     if image.shape[2] == 1:
-        rgb_colors = grayscale_region(converted.astype(dtype=np.uint8), thresh, join(output_dir, image_file), num_clusters)
+        rgb_colors = grayscale_region(image_copy.astype(dtype=np.uint8), thresh, join(output_dir, image_file), num_clusters)
     else:
-        rgb_colors = color_region(converted, thresh, join(output_dir, image_file), num_clusters)
-
-    print("Color difference:")
+        rgb_colors = color_region(image_copy, thresh, join(output_dir, image_file), num_clusters)
 
     selected_color = rgb2lab(np.uint8(np.asarray([[rgb_colors[0]]])))
-
     for index, value in enumerate(rgb_colors):
         # print(index, value)
         curr_color = rgb2lab(np.uint8(np.asarray([[value]])))
         diff = deltaE_cie76(selected_color, curr_color)
         print(index, value, diff)
 
-    # accquire medial axis of segmentation mask
-    image_medial_axis = medial_axis_image(thresh)
-
-    # save medial axis result
-    maxis = join(output_dir, f"{image_file}_medial_axis{img_file_ext}")
-    cv2.imwrite(maxis, img_as_ubyte(image_medial_axis))
-
     min_distance_value = 5
     # watershed based leaf area segmentaiton
-    labels = watershed_seg(converted, thresh, min_distance_value)
+    labels = watershed_seg(image_copy, thresh, min_distance_value)
 
     # save watershed result label image
     # Map component labels to hue val
     label_hue = np.uint8(128 * labels / np.max(labels))
-    # label_hue[labels == largest_label] = np.uint8(15)
     blank_ch = 255 * np.ones_like(label_hue)
     labeled_img = cv2.merge([label_hue, blank_ch, blank_ch])
 
     # cvt to BGR for display
     labeled_img = cv2.cvtColor(labeled_img, cv2.COLOR_HSV2BGR)
 
-    # set background label to black
-    labeled_img[label_hue == 0] = 0
-    lbl = join(output_dir, f"{image_file}_label{img_file_ext}")
-    cv2.imwrite(lbl, labeled_img)
-
     # find curvature
     if min_radius is not None:
-        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1, min_radius)
+        (avg_curv, label_trait) = compute_curv(image_copy, labels, image.shape[2] == 1, min_radius)
     else:
-        (avg_curv, label_trait) = compute_curv(converted, labels, image.shape[2] == 1)
+        (avg_curv, label_trait) = compute_curv(image_copy, labels, image.shape[2] == 1)
     if label_trait is not None:
-        curv = join(output_dir, f"{image_file}_curv{img_file_ext}")
+        curv = join(output_dir, f"{image_file}.curv.png")
         cv2.imwrite(curv, label_trait)
 
     # find external contour
     (trait_img, area, solidity, max_width, max_height) = comp_external_contour(image.copy(), thresh)
-    excont = join(output_dir, f"{image_file}_excontour{img_file_ext}")
+    excont = join(output_dir, f"{image_file}.cont.png")
     if trait_img is not None:
         cv2.imwrite(excont, trait_img)
 
     return image_file_name, area, solidity, max_width, max_height, avg_curv
-
-
-if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-i", "--input", required=True, help="path to input directory (containing image files)")
-    parser.add_argument("-o", "--output", required=False, help="path to directory to write output files")
-    parser.add_argument("-r", "--min-radius", required=False, help="minimum vessel radius to detect")
-    parser.add_argument("-ft", "--filetype", required=True, help="Image filetype")
-    parser.add_argument('-s', '--color-space', type=str, default='lab',
-                        help='Color space to use: BGR (default), HSV, Lab, YCrCb (YCC)')
-    parser.add_argument('-c', '--channels', type=str, default='1',
-                        help='Channel indices to use for clustering, where 0 is the first channel,'
-                             + ' 1 is the second channel, etc. E.g., if BGR color space is used, "02" '
-                             + 'selects channels B and R. (default "all")')
-    parser.add_argument('-n', '--num-clusters', type=int, default=2,
-                        help='Number of clusters for K-means clustering (default 3, min 2).')
-
-    args = vars(parser.parse_args())
-    input_dir = args["input"]
-    output_dir = args["output"] if 'output' in args else None
-    input_images = sorted(glob.glob(f"{input_dir}/*.{args['filetype']}"))
-    min_radius = args["min_radius"] if 'min_radius' in args else None
-    cpus = multiprocessing.cpu_count()
-
-    print(f"Using {int(cpus)} cores to process {len(input_images)} images...")
-
-    with closing(Pool(processes=cpus)) as pool:
-        result = pool.starmap(extract_traits, [(image, min_radius) for image in input_images])
-        pool.terminate()
-
-    # if output dir provided, create it (if needed). otherwise use current directory
-    if output_dir is not None:
-        Path(output_dir).mkdir(exist_ok=True)
-    else:
-        output_dir = ''
-
-    trait_file = join(output_dir, 'trait.xlsx')
-    print(f"Writing trait file '{trait_file}'...")
-
-    if os.path.isfile(trait_file):
-        wb = load_workbook(trait_file)
-    else:
-        wb = Workbook()
-
-    sheet = wb.active
-    sheet.cell(row=1, column=1).value = 'filename'
-    sheet.cell(row=1, column=2).value = 'leaf_area'
-    sheet.cell(row=1, column=3).value = 'solidity'
-    sheet.cell(row=1, column=4).value = 'max_width'
-    sheet.cell(row=1, column=5).value = 'max_height'
-    sheet.cell(row=1, column=6).value = 'curvature'
-    for row in result:
-        sheet.append(row)
-
-    wb.save(trait_file)
