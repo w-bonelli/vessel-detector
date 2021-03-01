@@ -25,5 +25,5 @@ logo: vessels.jpg
 resources:
   time: "01:00:00"
   mem: "10GB"
-  tasks: 1
+  processes: 1
   cores: 1

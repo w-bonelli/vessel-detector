@@ -20,5 +20,6 @@ data
 output*
 tests/scratch
 tests/output
+tests/output*
 tests/__pycache__
 .coverage

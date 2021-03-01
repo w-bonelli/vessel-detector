@@ -29,7 +29,7 @@ docker run -it -v "$(pwd)":/opt/dev -w /opt/dev wbonelli/vessel-detector python3
 To run with Docker, use a command like:
 
 ```shell
-docker run -t -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vd.py detect <input file> -o <output directory> -mr <minimum vessel radius> -ft <filetypes, comma-separated>
+docker run -it -v "$(pwd)":/opt/vessel-detector -w /opt/vessel-detector wbonelli/vessel-detector python3 vd.py detect <input file> -o <output directory> -mr <minimum vessel radius> -ft <filetypes, comma-separated>
 ```
 
 #### Singularity

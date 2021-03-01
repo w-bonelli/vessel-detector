@@ -9,25 +9,21 @@ from segmentation import clustering_grayscale, clustering_color, apply_watershed
 from utils import write_results
 
 
-def suxing(options: VesselDetectorOptions):
-    output_prefix = join(options.output_directory, f"{options.input_stem}.suxing")
+def original(options: VesselDetectorOptions):
+    output_prefix = join(options.output_directory, f"{options.input_stem}")
     output_ext = 'png'
 
     # read the image
     if options.input_file.endswith('.czi'):
         image = czifile.imread(options.input_file)
         image.shape = (image.shape[2], image.shape[3], image.shape[4])  # drop first 2 columns
-        image_copy = image.copy()
         output_ext = 'jpg'
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
     else:
         image = cv2.imread(options.input_file)
-        image_copy = image.copy()
-        cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
 
     # make backup image
     image_copy = image.copy()
-    cv2.imwrite(f"{output_prefix}.orig.{output_ext}", image_copy)
+    cv2.imwrite(f"{output_prefix}.original.{output_ext}", image_copy)
 
     # threshold and clustering
     colorspace = 'lab'
@@ -35,18 +31,7 @@ def suxing(options: VesselDetectorOptions):
     clusters = 2
     thresh = clustering_grayscale(image_copy, colorspace, channels, clusters) if image.shape[2] == 1 \
         else clustering_color(image_copy, colorspace, channels, clusters)
-    cv2.imwrite(f"{output_prefix}.seg.{output_ext}", thresh)
-
-    # invert segmented image
-    print(f"Inverting full image")
-    inv_orig = cv2.bitwise_not(image.copy())
-    cv2.imwrite(f"{output_prefix}.orig.inv.{output_ext}", inv_orig)
-
-    print(f"Inverting segmented image")
-    inv_thresh = cv2.bitwise_not(thresh.copy())
-    cv2.imwrite(f"{output_prefix}.seg.inv.{output_ext}", inv_thresh)
-
-    ## standard vessel-finding
+    cv2.imwrite(f"{output_prefix}.segmented.{output_ext}", thresh)
 
     # watershed segmentation
     min_distance_value = 5
@@ -60,25 +45,7 @@ def suxing(options: VesselDetectorOptions):
         (avg_curv, label_trait, results) = find_vessels(image_copy, labels, image.shape[2] == 1)
         write_results(results, options, f"{output_prefix}")
     if label_trait is not None:
-        cv2.imwrite(f"{output_prefix}.curv.{output_ext}", label_trait)
-
-    ## inverted vessel-finding
-
-    # watershed segmentation
-    min_distance_value = 5
-    inv_labels = apply_watershed(inv_orig, inv_thresh, min_distance_value)
-
-    # find vessel contours
-    if options.min_radius is not None:
-        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1, options.min_radius)
-        write_results(results, options, f"{output_prefix}.inv")
-    else:
-        (avg_curv, label_trait, results) = find_vessels(inv_orig, inv_labels, image.shape[2] == 1)
-        write_results(results, options, f"{output_prefix}.inv")
-    if label_trait is not None:
-        cv2.imwrite(f"{output_prefix}.inv.curv.{output_ext}", label_trait)
-
-    return options.input_stem, None, None, None, None, avg_curv
+        cv2.imwrite(f"{output_prefix}.contours.{output_ext}", label_trait)
 
 
 def alt1(options: VesselDetectorOptions):
