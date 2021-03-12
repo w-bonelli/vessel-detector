@@ -5,7 +5,12 @@ clone: False
 image: docker://wbonelli/vessel-detector
 commands: python3 /opt/vessel-detector/vd.py detect "$INPUT" -mr $MIN_RADIUS
 params:
- - min_radius=15
+ - name: min_radius
+   type: number
+   min: 5
+   max: 100
+   step: 1
+   default: 15
 input:
   kind: files
   path:
