@@ -8,7 +8,7 @@ Author: Suxing Liu (adapted by Wes Bonelli)
 
 ## Requirements & Installation
 
-Either [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/) is required to run this project in a Unix environment. First, clone the project with `git clone https://github.com/w-bonelli/vessel-analysis.git`.
+The easiest way to run this project in a Unix environment is with [Docker](https://www.docker.com/) or [Singularity ](https://sylabs.io/singularity/).
 
 ## Usage
 
