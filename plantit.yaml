@@ -28,7 +28,7 @@ output:
       - png
 logo: vessels.jpg
 jobqueue:
-  time: "01:00:00"
+  walltime: "01:00:00"
   memory: "5GB"
   processes: 1
   cores: 1
